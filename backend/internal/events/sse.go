@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 )
 
 // EventBroker manages Server-Sent Events clients and broadcasting.
@@ -27,7 +28,7 @@ func (b *EventBroker) Subscribe() (string, <-chan []byte) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	id := fmt.Sprintf("client-%d", len(b.clients)+1)
+	id := fmt.Sprintf("client-%d-%d", time.Now().UnixNano(), len(b.clients)+1)
 	ch := make(chan []byte, 64)
 	b.clients[id] = ch
 	return id, ch
@@ -37,11 +38,7 @@ func (b *EventBroker) Subscribe() (string, <-chan []byte) {
 func (b *EventBroker) Unsubscribe(id string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
-	if ch, ok := b.clients[id]; ok {
-		close(ch)
-		delete(b.clients, id)
-	}
+	delete(b.clients, id)
 }
 
 // Broadcast sends an event to all connected clients.

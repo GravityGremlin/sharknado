@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -165,6 +166,9 @@ func (s *Server) handleTrackInfo(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleTrackStream(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if unescaped, err := url.PathUnescape(id); err == nil {
+		id = unescaped
+	}
 	format := models.StreamFormat(r.URL.Query().Get("format"))
 	if format == "" {
 		format = models.StreamFormatOpus

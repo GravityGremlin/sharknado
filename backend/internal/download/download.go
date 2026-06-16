@@ -5,6 +5,8 @@ package download
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -97,7 +99,8 @@ func (m *Manager) Get(id string) *models.DownloadJob {
 	if !ok {
 		return nil
 	}
-	return &job.DownloadJob
+	clone := job.DownloadJob
+	return &clone
 }
 
 // List returns all jobs.
@@ -106,7 +109,8 @@ func (m *Manager) List() []*models.DownloadJob {
 	defer m.mu.RUnlock()
 	jobs := make([]*models.DownloadJob, 0, len(m.jobs))
 	for _, j := range m.jobs {
-		jobs = append(jobs, &j.DownloadJob)
+		clone := j.DownloadJob
+		jobs = append(jobs, &clone)
 	}
 	return jobs
 }
@@ -168,10 +172,25 @@ func (m *Manager) Delete(id string) error {
 
 // execute runs the actual download subprocess.
 func (m *Manager) execute(job *Job) {
-	m.workers <- struct{}{}
-	defer func() { <-m.workers }()
+	// Early check if someone canceled before token was granted
+	m.mu.RLock()
+	if job.Status == "cancelled" || job.Status == "paused" {
+		m.mu.RUnlock()
+		return
+	}
+	m.mu.RUnlock()
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// Watch context for cancellation inside workers semaphore acquire
+	select {
+	case m.workers <- struct{}{}:
+		// acquired
+	case <-ctx.Done():
+		cancel()
+		return
+	}
+	defer func() { <-m.workers }()
 
 	m.mu.Lock()
 	job.CancelFunc = cancel
@@ -303,7 +322,9 @@ func (m *Manager) broadcast(event string, data any) {
 }
 
 func generateID() string {
-	return fmt.Sprintf("dl-%d", time.Now().UnixNano())
+	b := make([]byte, 4)
+	rand.Read(b)
+	return fmt.Sprintf("dl-%d-%s", time.Now().UnixNano(), hex.EncodeToString(b))
 }
 
 // ScanDir finds downloaded audio files in a directory and extracts metadata via ffprobe.
