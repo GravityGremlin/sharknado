@@ -200,16 +200,21 @@ func formatContentType(format models.StreamFormat) string {
 	}
 }
 
+type cacheEntry struct {
+	data      []byte
+	expiresAt time.Time
+}
+
 // streamCache caches transcoded audio data.
 type streamCache struct {
 	mu      sync.RWMutex
-	entries map[string][]byte
+	entries map[string]cacheEntry
 	ttl     time.Duration
 }
 
 func newStreamCache(ttl time.Duration) *streamCache {
 	return &streamCache{
-		entries: make(map[string][]byte),
+		entries: make(map[string]cacheEntry),
 		ttl:     ttl,
 	}
 }
@@ -218,26 +223,42 @@ func (c *streamCache) get(key string) ([]byte, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	data, ok := c.entries[key]
+	entry, ok := c.entries[key]
 	if !ok {
 		return nil, false
 	}
-	// Simple TTL not implemented for in-memory cache (use file-based cache instead)
-	return data, true
+	if time.Now().After(entry.expiresAt) {
+		return nil, false
+	}
+	return entry.data, true
 }
 
 func (c *streamCache) set(key string, data []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Evict oldest if too many entries
 	if len(c.entries) > 100 {
-		for k := range c.entries {
-			delete(c.entries, k)
-			break
+		for k, v := range c.entries {
+			if time.Now().After(v.expiresAt) {
+				delete(c.entries, k)
+			}
+		}
+		// If still too many, delete roughly 10%
+		if len(c.entries) > 100 {
+			toDelete := 10
+			for k := range c.entries {
+				delete(c.entries, k)
+				toDelete--
+				if toDelete <= 0 {
+					break
+				}
+			}
 		}
 	}
-	c.entries[key] = data
+	c.entries[key] = cacheEntry{
+		data:      data,
+		expiresAt: time.Now().Add(c.ttl),
+	}
 }
 
 // FindTrackFile searches for any audio file matching the given query in a directory.

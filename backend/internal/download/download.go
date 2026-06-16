@@ -297,8 +297,9 @@ func parseProgress(r interface{ Read([]byte) (int, error) }, job *Job, m *Manage
 			if pct, e := strconv.Atoi(matches[1]); e == nil {
 				m.mu.Lock()
 				job.Progress = float64(pct)
+				update := job.DownloadJob
 				m.mu.Unlock()
-				m.broadcast("job.updated", job.DownloadJob)
+				m.broadcast("job.updated", update)
 			}
 		}
 

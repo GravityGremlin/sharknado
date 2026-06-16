@@ -32,18 +32,27 @@ export function usePlayer() {
         },
         onload: () => {
           setDuration(sound.duration());
+        },
+        onloaderror: (_, err) => {
+          console.error('Audio load failed:', err);
+          setIsPlaying(false);
+        },
+        onplayerror: (_, err) => {
+          console.error('Audio play failed:', err);
+          setIsPlaying(false);
         }
       });
 
       howlerRef.current = sound;
       setCurrentTrack(track);
       setQueueIndex(-1);
+      sound.play();
+      return;
     }
-    
+
     if (howlerRef.current) {
       howlerRef.current.play();
     }
-    setIsPlaying(true);
   }, [volume]);
 
   const pause = useCallback(() => {
@@ -65,17 +74,17 @@ export function usePlayer() {
     if (queue.length > 0 && queueIndex < queue.length - 1) {
       const nextIdx = queueIndex + 1;
       setQueueIndex(nextIdx);
-      setCurrentTrack(queue[nextIdx]);
+      play(queue[nextIdx]);
     }
-  }, [queue, queueIndex]);
+  }, [queue, queueIndex, play]);
 
   const prev = useCallback(() => {
     if (queue.length > 0 && queueIndex > 0) {
       const prevIdx = queueIndex - 1;
       setQueueIndex(prevIdx);
-      setCurrentTrack(queue[prevIdx]);
+      play(queue[prevIdx]);
     }
-  }, [queue, queueIndex]);
+  }, [queue, queueIndex, play]);
 
   const seek = useCallback((value) => {
     if (howlerRef.current) {
@@ -112,9 +121,10 @@ export function usePlayer() {
   const setQueueAndPlay = useCallback((tracks, startIndex = 0) => {
     setQueue(tracks);
     setQueueIndex(startIndex);
-    setCurrentTrack(tracks[startIndex] || null);
-    setIsPlaying(true);
-  }, []);
+    if (tracks[startIndex]) {
+      play(tracks[startIndex]);
+    }
+  }, [play]);
 
   return {
     currentTrack,

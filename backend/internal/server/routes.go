@@ -336,7 +336,6 @@ func (s *Server) handlePlaylistAddTrack(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, http.StatusCreated, map[string]any{"status": "added", "track_id": req.TrackID})
 }
 
