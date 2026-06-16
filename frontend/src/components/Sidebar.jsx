@@ -1,11 +1,26 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { scanLibrary } from '../api/client';
 
-export default function Sidebar({ activeView, onNavigate, activePlaylistId }) {
+export default function Sidebar({ activeView, onNavigate, activePlaylistId, onLibraryScanned }) {
   // Placeholder playlists for nav
   const playlists = [
     { id: 'pl-1', name: 'Favorites' },
     { id: 'pl-2', name: 'Recently Added' },
   ];
+
+  const [scanning, setScanning] = useState(false);
+
+  const handleScan = async () => {
+    setScanning(true);
+    try {
+      const result = await scanLibrary();
+      if (onLibraryScanned) onLibraryScanned(result);
+    } catch (err) {
+      console.error('Scan failed:', err);
+    } finally {
+      setScanning(false);
+    }
+  };
 
   return (
     <nav className="sidebar">
@@ -22,6 +37,13 @@ export default function Sidebar({ activeView, onNavigate, activePlaylistId }) {
           onClick={() => onNavigate('library')}
         >
           Library
+        </div>
+        <div
+          className="sidebar-item"
+          onClick={handleScan}
+          style={{ fontSize: '0.75rem', color: scanning ? 'var(--accent)' : 'var(--text3)' }}
+        >
+          {scanning ? 'Scanning...' : 'Scan Downloads'}
         </div>
         <div
           className={`sidebar-item ${activeView === 'downloads' ? 'active' : ''}`}

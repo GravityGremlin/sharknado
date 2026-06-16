@@ -39,7 +39,7 @@ func NewServer(cfg *config.Config, db *library.DB, broker *events.EventBroker) *
 	// Initialize search engine
 	s.search = search.NewEngine(search.Config{
 		StreamripConfigPath: cfg.StreamripConfigDir + "/config.toml",
-		TidalTokenPath:     cfg.TidalConfigDir + "/token.json",
+		TidalTokenPath:      cfg.TidalConfigDir + "/token.json",
 	})
 
 	// Initialize download manager
@@ -47,6 +47,7 @@ func NewServer(cfg *config.Config, db *library.DB, broker *events.EventBroker) *
 		DownloadDir:   cfg.DownloadDir,
 		MaxConcurrent: 3,
 		Broker:        broker,
+		DB:            db,
 	})
 
 	// Initialize player/streamer

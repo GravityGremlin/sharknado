@@ -66,6 +66,7 @@ type SearchResult struct {
 	Title    string  `json:"title"`
 	Artist   string  `json:"artist"`
 	Album    string  `json:"album,omitempty"`
+	AlbumID  string  `json:"album_id,omitempty"`
 	Duration float64 `json:"duration,omitempty"`
 	CoverURL string  `json:"cover_url,omitempty"`
 	Type     string  `json:"type"` // track, album, playlist

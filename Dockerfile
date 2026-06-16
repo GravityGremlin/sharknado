@@ -16,7 +16,7 @@ COPY backend/ .
 RUN CGO_ENABLED=0 go build -o /sharknado ./cmd/sharknado/
 
 # ── Stage 3: Runtime ───────────────────────────────────────────────
-FROM python:3.14-slim
+FROM python:3.13-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg ca-certificates tzdata && \
     rm -rf /var/lib/apt/lists/*
@@ -28,6 +28,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pip install --no-cache-dir streamrip tidalapi && \
     apt-get purge -y gcc g++ && apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
+
+# Install tidal-dl-ng from vendored tarball (removed from PyPI)
+COPY tidal_dl_ng.tar.gz /tmp/
+RUN pip install --no-cache-dir /tmp/tidal_dl_ng.tar.gz && rm /tmp/tidal_dl_ng.tar.gz
 
 # Copy backend binary
 COPY --from=backend-builder --chown=shark:shark /sharknado /sharknado

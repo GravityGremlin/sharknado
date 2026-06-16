@@ -121,6 +121,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"query":   query,
 		"results": results,
+		"grouped": groupSearchResults(results),
 	})
 }
 
@@ -147,6 +148,7 @@ func (s *Server) handleSearchService(w http.ResponseWriter, r *http.Request) {
 		"service": service,
 		"query":   query,
 		"results": results,
+		"grouped": groupSearchResults(results),
 	})
 }
 
@@ -334,16 +336,48 @@ func (s *Server) handlePlaylistRemoveTrack(w http.ResponseWriter, r *http.Reques
 // ── Library ─────────────────────────────────────────────────────────
 
 func (s *Server) handleLibraryList(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"tracks": []any{}, "albums": []any{}})
+	tracks, err := s.db.ListTracks()
+	if err != nil {
+		log.Printf("list tracks: %v", err)
+		tracks = nil
+	}
+	albums, err := s.db.ListAlbums()
+	if err != nil {
+		log.Printf("list albums: %v", err)
+		albums = nil
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tracks": tracks, "albums": albums})
 }
 
 func (s *Server) handleLibraryScan(w http.ResponseWriter, r *http.Request) {
-	tracks, err := download.ScanDir(s.cfg.LibraryDir)
+	// Scan downloads directory
+	dlTracks, err := download.ScanDir(s.cfg.DownloadDir)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+		log.Printf("scan downloads: %v", err)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": "scanned", "count": len(tracks), "tracks": tracks})
+	// Scan library directory
+	libTracks, err := download.ScanDir(s.cfg.LibraryDir)
+	if err != nil {
+		log.Printf("scan library: %v", err)
+	}
+
+	allTracks := append(dlTracks, libTracks...)
+
+	// Persist to DB
+	imported := 0
+	for i := range allTracks {
+		if err := s.db.InsertTrack(&allTracks[i]); err != nil {
+			log.Printf("import track: %v", err)
+		} else {
+			imported++
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":   "scanned",
+		"found":    len(allTracks),
+		"imported": imported,
+	})
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -361,4 +395,71 @@ func Download(path string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("open file: %w", err)
 	}
 	return f, nil
+}
+
+// albumGroup is an album with its tracks in a grouped search response.
+type albumGroup struct {
+	AlbumID  string                `json:"album_id"`
+	Album    string                `json:"album"`
+	Artist   string                `json:"artist"`
+	Provider string                `json:"provider"`
+	CoverURL string                `json:"cover_url,omitempty"`
+	Tracks   []models.SearchResult `json:"tracks"`
+}
+
+// artistGroup is an artist with their albums in a grouped search response.
+type artistGroup struct {
+	Artist string       `json:"artist"`
+	Albums []albumGroup `json:"albums"`
+}
+
+// groupSearchResults groups flat search results by artist then album.
+func groupSearchResults(results []models.SearchResult) []artistGroup {
+	// Build maps preserving insertion order
+	type artistAlbumKey struct{ artist, album, provider string }
+	artistOrder := make([]string, 0)
+	artistSeen := make(map[string]bool)
+	albumOrder := make(map[string][]artistAlbumKey)
+	albumSeen := make(map[artistAlbumKey]bool)
+	albumMap := make(map[artistAlbumKey]*albumGroup)
+
+	for _, r := range results {
+		artist := r.Artist
+		if artist == "" {
+			artist = "Unknown Artist"
+		}
+		album := r.Album
+		if album == "" {
+			album = "Unknown Album"
+		}
+
+		if !artistSeen[artist] {
+			artistSeen[artist] = true
+			artistOrder = append(artistOrder, artist)
+		}
+
+		key := artistAlbumKey{artist, album, r.Provider}
+		if !albumSeen[key] {
+			albumSeen[key] = true
+			albumOrder[artist] = append(albumOrder[artist], key)
+			albumMap[key] = &albumGroup{
+				AlbumID:  r.AlbumID,
+				Album:    album,
+				Artist:   artist,
+				Provider: r.Provider,
+				CoverURL: r.CoverURL,
+			}
+		}
+		albumMap[key].Tracks = append(albumMap[key].Tracks, r)
+	}
+
+	grouped := make([]artistGroup, 0, len(artistOrder))
+	for _, artist := range artistOrder {
+		ag := artistGroup{Artist: artist}
+		for _, key := range albumOrder[artist] {
+			ag.Albums = append(ag.Albums, *albumMap[key])
+		}
+		grouped = append(grouped, ag)
+	}
+	return grouped
 }

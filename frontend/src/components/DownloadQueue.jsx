@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { getDownloads, pauseDownload, cancelDownload } from '../api/client';
 
 const STATUS_LABELS = {
   queued: 'Queued',
@@ -6,11 +7,51 @@ const STATUS_LABELS = {
   paused: 'Paused',
   completed: 'Completed',
   failed: 'Failed',
+  cancelled: 'Cancelled',
 };
 
-export default function DownloadQueue() {
-  // Placeholder — will be loaded from API + SSE
-  const jobs = [];
+export default function DownloadQueue({ refreshTrigger }) {
+  const [jobs, setJobs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchJobs = useCallback(async () => {
+    try {
+      const data = await getDownloads();
+      setJobs(data.jobs || []);
+    } catch (err) {
+      console.error('Failed to fetch downloads:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchJobs();
+  }, [fetchJobs, refreshTrigger]);
+
+  // Poll for updates every 3 seconds
+  useEffect(() => {
+    const interval = setInterval(fetchJobs, 3000);
+    return () => clearInterval(interval);
+  }, [fetchJobs]);
+
+  const handlePause = async (id) => {
+    try {
+      await pauseDownload(id);
+      fetchJobs();
+    } catch (err) {
+      console.error('Pause failed:', err);
+    }
+  };
+
+  const handleCancel = async (id) => {
+    try {
+      await cancelDownload(id);
+      fetchJobs();
+    } catch (err) {
+      console.error('Cancel failed:', err);
+    }
+  };
 
   return (
     <div>
@@ -19,15 +60,21 @@ export default function DownloadQueue() {
         <p>Manage your download queue</p>
       </div>
 
-      {jobs.length === 0 && (
+      {loading && (
         <div className="empty-state">
-          <div className="icon">⬇</div>
-          <h3>No downloads yet</h3>
-          <p>Submit a download URL to start downloading music.</p>
+          <span className="spinner spinner-lg" />
         </div>
       )}
 
-      {jobs.length > 0 && (
+      {!loading && jobs.length === 0 && (
+        <div className="empty-state">
+          <div className="icon">&#11015;</div>
+          <h3>No downloads yet</h3>
+          <p>Submit a download URL or click the download button on search results.</p>
+        </div>
+      )}
+
+      {!loading && jobs.length > 0 && (
         <table className="download-table">
           <thead>
             <tr>
@@ -61,13 +108,10 @@ export default function DownloadQueue() {
                 <td>
                   <div style={{ display: 'flex', gap: 4 }}>
                     {job.status === 'running' && (
-                      <button className="btn btn-sm">⏸</button>
-                    )}
-                    {job.status === 'paused' && (
-                      <button className="btn btn-sm">▶</button>
+                      <button className="btn btn-sm" onClick={() => handlePause(job.id)} title="Pause">&#9646;&#9646;</button>
                     )}
                     {(job.status === 'queued' || job.status === 'paused') && (
-                      <button className="btn btn-sm btn-danger">✕</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleCancel(job.id)} title="Cancel">&#10005;</button>
                     )}
                   </div>
                 </td>

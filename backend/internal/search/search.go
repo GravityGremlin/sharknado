@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,10 +22,11 @@ import (
 )
 
 const (
-	defaultTimeout = 15 * time.Second
-	qobuzSearchURL = "https://api.qobuz.com/v2.1/search/queries"
+	defaultTimeout  = 15 * time.Second
+	qobuzSearchURL  = "https://www.qobuz.com/api.json/0.2/track/search"
 	deezerSearchURL = "https://api.deezer.com/search"
-	tidalSearchURL = "https://api.tidal.com/v1/search"
+	tidalSearchURL  = "https://api.tidal.com/v1/search"
+	tidalClientID   = "zU4XHVVkc2tDPo4t"
 )
 
 // Config holds auth config paths.
@@ -35,13 +37,14 @@ type Config struct {
 
 // Engine orchestrates parallel searches across all providers.
 type Engine struct {
-	config    Config
-	cache     *searchCache
-	http      *http.Client
-	qobuzApp  string
-	qobuzToken string
-	tidalToken string
+	config       Config
+	cache        *searchCache
+	http         *http.Client
+	qobuzApp     string
+	qobuzToken   string
+	tidalToken   string
 	tidalRefresh string
+	tidalCountry string
 }
 
 // NewEngine creates a search engine with all providers.
@@ -154,23 +157,22 @@ func (e *Engine) searchQobuz(ctx context.Context, query string) ([]models.Search
 	q := req.URL.Query()
 	q.Set("query", query)
 	q.Set("limit", "15")
-	q.Set("type", "tracks")
+	q.Set("offset", "0")
 	q.Set("app_id", e.qobuzApp)
-	req.URL.RawQuery = q.Encode()
-
 	if e.qobuzToken != "" {
-		req.Header.Set("Authorization", "Bearer "+e.qobuzToken)
+		q.Set("user_auth_token", e.qobuzToken)
 	}
+	req.URL.RawQuery = q.Encode()
 
 	resp, err := e.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("qobuz request failed: %w", err)
+		return e.searchQobuzWithRip(ctx, query, fmt.Errorf("qobuz request failed: %w", err))
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("qobuz returned %d: %s", resp.StatusCode, string(body))
+		return e.searchQobuzWithRip(ctx, query, fmt.Errorf("qobuz returned %d: %s", resp.StatusCode, string(body)))
 	}
 
 	var data struct {
@@ -178,16 +180,18 @@ func (e *Engine) searchQobuz(ctx context.Context, query string) ([]models.Search
 			Items []struct {
 				ID        int    `json:"id"`
 				Title     string `json:"title"`
-				Performers []struct {
+				Performer struct {
 					Name string `json:"name"`
-				} `json:"performers"`
+				} `json:"performer"`
 				Album struct {
+					ID    string `json:"id"`
 					Title string `json:"title"`
+					Image struct {
+						Small string `json:"small"`
+						Large string `json:"large"`
+					} `json:"image"`
 				} `json:"album"`
 				Duration int `json:"duration"`
-				Cover    struct {
-					Small string `json:"small"`
-				} `json:"cover"`
 			} `json:"items"`
 		} `json:"tracks"`
 	}
@@ -198,9 +202,10 @@ func (e *Engine) searchQobuz(ctx context.Context, query string) ([]models.Search
 
 	results := make([]models.SearchResult, 0, len(data.Tracks.Items))
 	for _, t := range data.Tracks.Items {
-		artist := ""
-		if len(t.Performers) > 0 {
-			artist = t.Performers[0].Name
+		artist := t.Performer.Name
+		coverURL := t.Album.Image.Large
+		if coverURL == "" {
+			coverURL = t.Album.Image.Small
 		}
 		results = append(results, models.SearchResult{
 			ID:       fmt.Sprintf("qobuz:%d", t.ID),
@@ -208,13 +213,70 @@ func (e *Engine) searchQobuz(ctx context.Context, query string) ([]models.Search
 			Title:    t.Title,
 			Artist:   artist,
 			Album:    t.Album.Title,
+			AlbumID:  t.Album.ID,
 			Duration: float64(t.Duration),
-			CoverURL: t.Cover.Small,
+			CoverURL: coverURL,
 			Type:     "track",
 		})
 	}
 
 	return results, nil
+}
+
+func (e *Engine) searchQobuzWithRip(ctx context.Context, query string, apiErr error) ([]models.SearchResult, error) {
+	out, err := os.CreateTemp("", "sharknado-qobuz-*.json")
+	if err != nil {
+		return nil, fmt.Errorf("%v; create rip output: %w", apiErr, err)
+	}
+	outPath := out.Name()
+	out.Close()
+	defer os.Remove(outPath)
+
+	cmd := exec.CommandContext(ctx, "rip", "search", "qobuz", "track", query, "-n", "15", "-o", outPath)
+	cmd.Env = append(os.Environ(), "PATH=/usr/local/bin:/usr/bin:/bin")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%v; qobuz rip fallback failed: %w: %s", apiErr, err, strings.TrimSpace(string(output)))
+	}
+
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		return nil, fmt.Errorf("%v; read rip output: %w", apiErr, err)
+	}
+
+	var items []struct {
+		Source    string `json:"source"`
+		MediaType string `json:"media_type"`
+		ID        string `json:"id"`
+		Desc      string `json:"desc"`
+	}
+	if err := json.Unmarshal(data, &items); err != nil {
+		return nil, fmt.Errorf("%v; decode rip output: %w", apiErr, err)
+	}
+
+	results := make([]models.SearchResult, 0, len(items))
+	for _, item := range items {
+		if item.ID == "" {
+			continue
+		}
+		title, artist := splitRipDescription(item.Desc)
+		results = append(results, models.SearchResult{
+			ID:       "qobuz:" + item.ID,
+			Provider: "qobuz",
+			Title:    title,
+			Artist:   artist,
+			Type:     "track",
+		})
+	}
+	return results, nil
+}
+
+func splitRipDescription(desc string) (string, string) {
+	parts := strings.SplitN(desc, " by ", 2)
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return desc, ""
 }
 
 // ── Deezer Search ──────────────────────────────────────────────────
@@ -243,15 +305,17 @@ func (e *Engine) searchDeezer(ctx context.Context, query string) ([]models.Searc
 
 	var data struct {
 		Data []struct {
-			ID       int    `json:"id"`
-			Title    string `json:"title"`
-			Artist   struct {
+			ID     int    `json:"id"`
+			Title  string `json:"title"`
+			Artist struct {
 				Name string `json:"name"`
 			} `json:"artist"`
 			Album struct {
+				ID    int    `json:"id"`
 				Title string `json:"title"`
+				Cover string `json:"cover_big"`
 			} `json:"album"`
-			Duration int    `json:"duration"`
+			Duration   int    `json:"duration"`
 			AlbumCover string `json:"album_cover"` // not standard but sometimes present
 		} `json:"data"`
 	}
@@ -262,13 +326,17 @@ func (e *Engine) searchDeezer(ctx context.Context, query string) ([]models.Searc
 
 	results := make([]models.SearchResult, 0, len(data.Data))
 	for _, t := range data.Data {
-		cover := fmt.Sprintf("https://e-cdns-images.dzcdn.net/images/artist/%s/250x250.jpg", t.Artist.Name)
+		cover := t.Album.Cover
+		if cover == "" {
+			cover = fmt.Sprintf("https://e-cdns-images.dzcdn.net/images/artist/%s/250x250.jpg", t.Artist.Name)
+		}
 		results = append(results, models.SearchResult{
 			ID:       fmt.Sprintf("deezer:%d", t.ID),
 			Provider: "deezer",
 			Title:    t.Title,
 			Artist:   t.Artist.Name,
 			Album:    t.Album.Title,
+			AlbumID:  fmt.Sprintf("%d", t.Album.ID),
 			Duration: float64(t.Duration),
 			CoverURL: cover,
 			Type:     "track",
@@ -294,7 +362,11 @@ func (e *Engine) searchTidal(ctx context.Context, query string) ([]models.Search
 	q.Set("query", query)
 	q.Set("limit", "15")
 	q.Set("types", "TRACKS")
-	q.Set("countryCode", "US")
+	country := e.tidalCountry
+	if country == "" {
+		country = "US"
+	}
+	q.Set("countryCode", country)
 	req.URL.RawQuery = q.Encode()
 
 	req.Header.Set("Authorization", "Bearer "+e.tidalToken)
@@ -323,12 +395,16 @@ func (e *Engine) searchTidal(ctx context.Context, query string) ([]models.Search
 	var data struct {
 		Tracks struct {
 			Items []struct {
-				ID       int    `json:"id"`
-				Title    string `json:"title"`
-				Artist   struct {
+				ID     int    `json:"id"`
+				Title  string `json:"title"`
+				Artist struct {
 					Name string `json:"name"`
 				} `json:"artist"`
+				Artists []struct {
+					Name string `json:"name"`
+				} `json:"artists"`
 				Album struct {
+					ID    int    `json:"id"`
 					Title string `json:"title"`
 					Cover string `json:"cover"`
 				} `json:"album"`
@@ -343,19 +419,31 @@ func (e *Engine) searchTidal(ctx context.Context, query string) ([]models.Search
 
 	results := make([]models.SearchResult, 0, len(data.Tracks.Items))
 	for _, t := range data.Tracks.Items {
+		artist := t.Artist.Name
+		if artist == "" && len(t.Artists) > 0 {
+			artist = t.Artists[0].Name
+		}
 		results = append(results, models.SearchResult{
 			ID:       fmt.Sprintf("tidal:%d", t.ID),
 			Provider: "tidal",
 			Title:    t.Title,
-			Artist:   t.Artist.Name,
+			Artist:   artist,
 			Album:    t.Album.Title,
+			AlbumID:  fmt.Sprintf("%d", t.Album.ID),
 			Duration: float64(t.Duration),
-			CoverURL: t.Album.Cover,
+			CoverURL: tidalCoverURL(t.Album.Cover),
 			Type:     "track",
 		})
 	}
 
 	return results, nil
+}
+
+func tidalCoverURL(cover string) string {
+	if cover == "" || strings.HasPrefix(cover, "http://") || strings.HasPrefix(cover, "https://") {
+		return cover
+	}
+	return "https://resources.tidal.com/images/" + strings.ReplaceAll(cover, "-", "/") + "/1280x1280.jpg"
 }
 
 // refreshTidalToken attempts to refresh the Tidal access token.
@@ -364,21 +452,11 @@ func (e *Engine) refreshTidalToken() (bool, error) {
 		return false, fmt.Errorf("no refresh token")
 	}
 
-	// Read client_id from settings.json
-	settingsPath := strings.Replace(e.config.TidalTokenPath, "token.json", "settings.json", 1)
-	settingsData, err := os.ReadFile(settingsPath)
-	if err != nil {
-		return false, err
-	}
-	var settings struct {
-		QualityAudio string `json:"quality_audio"`
-	}
-	json.Unmarshal(settingsData, &settings)
-
 	data := url.Values{}
 	data.Set("grant_type", "refresh_token")
 	data.Set("refresh_token", e.tidalRefresh)
-	data.Set("client_id", "zU4XHVVkc2tDPo4t") // tidal-dl-ng default client_id
+	data.Set("client_id", tidalClientID) // tidal-dl-ng default client_id
+	data.Set("client_secret", "VpUHBBKLP37yYkFGKbbFKgbWg1FLLy3oUz2oXWJb0ds=")
 
 	req, err := http.NewRequest("POST", "https://auth.tidal.com/v1/oauth2/token", strings.NewReader(data.Encode()))
 	if err != nil {
@@ -410,7 +488,31 @@ func (e *Engine) refreshTidalToken() (bool, error) {
 		e.tidalRefresh = tokenResp.RefreshToken
 	}
 
+	// Persist refreshed tokens to disk
+	e.persistTidalToken()
+
 	return true, nil
+}
+
+func (e *Engine) persistTidalToken() {
+	path := e.config.TidalTokenPath
+	if path == "" {
+		return
+	}
+	tok := map[string]any{
+		"token_type":    "Bearer",
+		"access_token":  e.tidalToken,
+		"refresh_token": e.tidalRefresh,
+		"expiry_time":   float64(time.Now().Add(24 * time.Hour).Unix()),
+	}
+	data, err := json.MarshalIndent(tok, "", "  ")
+	if err != nil {
+		log.Printf("marshal tidal token: %v", err)
+		return
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		log.Printf("write tidal token to %s: %v", path, err)
+	}
 }
 
 // ── Config Loading ─────────────────────────────────────────────────
@@ -444,6 +546,9 @@ func (e *Engine) loadQobuzAuth() {
 			parts := strings.SplitN(line, "=", 2)
 			key := strings.TrimSpace(parts[0])
 			val := strings.TrimSpace(parts[1])
+			if idx := strings.Index(val, "#"); idx >= 0 {
+				val = strings.TrimSpace(val[:idx])
+			}
 			val = strings.Trim(val, "\"")
 
 			switch key {
@@ -477,6 +582,7 @@ func (e *Engine) loadTidalAuth() {
 		AccessToken  string  `json:"access_token"`
 		RefreshToken string  `json:"refresh_token"`
 		ExpiryTime   float64 `json:"expiry_time"`
+		CountryCode  string  `json:"country_code"`
 	}
 	if err := json.Unmarshal(data, &token); err != nil {
 		log.Printf("parse tidal token: %v", err)
@@ -485,6 +591,7 @@ func (e *Engine) loadTidalAuth() {
 
 	e.tidalToken = token.AccessToken
 	e.tidalRefresh = token.RefreshToken
+	e.tidalCountry = token.CountryCode
 
 	if e.tidalToken != "" {
 		log.Printf("tidal auth loaded (token present, expiry=%.0f)", token.ExpiryTime)
@@ -493,15 +600,19 @@ func (e *Engine) loadTidalAuth() {
 
 func (e *Engine) filterProviders(names []string) []string {
 	if len(names) == 0 {
-		return []string{"qobuz", "deezer", "tidal"}
+		// Deezer disabled: ARL auth expired, will re-enable when fixed
+		return []string{"qobuz", "tidal"}
 	}
 
 	var filtered []string
 	for _, n := range names {
 		n = strings.TrimSpace(n)
 		switch n {
-		case "qobuz", "deezer", "tidal":
+		case "qobuz", "tidal":
 			filtered = append(filtered, n)
+		case "deezer":
+			// Deezer disabled: ARL auth expired
+			continue
 		}
 	}
 	return filtered

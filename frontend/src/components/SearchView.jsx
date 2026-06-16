@@ -1,13 +1,33 @@
 import React, { useState, useCallback } from 'react';
 import TrackRow from './TrackRow';
-import { search as searchAPI } from '../api/client';
+import { search as searchAPI, submitDownload } from '../api/client';
 
-export default function SearchView({ player }) {
+function buildAlbumUrl(provider, albumId) {
+  switch (provider) {
+    case 'qobuz':
+      return `https://www.qobuz.com/album/x/${albumId}`;
+    case 'tidal':
+      return `https://tidal.com/album/${albumId}`;
+    case 'deezer':
+      return `https://www.deezer.com/album/${albumId}`;
+    default:
+      return '';
+  }
+}
+
+function countArtistTracks(albums) {
+  return albums.reduce((sum, a) => sum + a.tracks.length, 0);
+}
+
+export default function SearchView({ player, onDownloadStarted }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
+  const [groupedData, setGroupedData] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [services, setServices] = useState({ tidal: true, qobuz: true, deezer: true });
+  const [services, setServices] = useState({ tidal: true, qobuz: true });
   const [searched, setSearched] = useState(false);
+  const [error, setError] = useState(null);
+  const [expandedArtists, setExpandedArtists] = useState({});
 
   const toggleService = useCallback((svc) => {
     setServices(prev => ({ ...prev, [svc]: !prev[svc] }));
@@ -17,6 +37,7 @@ export default function SearchView({ player }) {
     if (!query.trim()) return;
     setLoading(true);
     setSearched(true);
+    setError(null);
     try {
       const activeServices = Object.entries(services)
         .filter(([, v]) => v)
@@ -24,9 +45,17 @@ export default function SearchView({ player }) {
         .join(',');
       const data = await searchAPI(query, activeServices);
       setResults(data.results || []);
+      setGroupedData(data.grouped || []);
+      // Expand all artist sections by default
+      const expanded = {};
+      (data.grouped || []).forEach(g => { expanded[g.artist] = true; });
+      setExpandedArtists(expanded);
+      if (data.error) setError(data.error);
     } catch (err) {
       console.error('Search error:', err);
       setResults([]);
+      setGroupedData([]);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -35,6 +64,28 @@ export default function SearchView({ player }) {
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Enter') doSearch();
   }, [doSearch]);
+
+  const handleDownloadTrack = useCallback((track) => {
+    if (onDownloadStarted) onDownloadStarted(track);
+  }, [onDownloadStarted]);
+
+  const toggleArtist = useCallback((artist) => {
+    setExpandedArtists(prev => ({ ...prev, [artist]: !prev[artist] }));
+  }, []);
+
+  const handleDownloadAlbum = useCallback((album) => {
+    const url = buildAlbumUrl(album.provider, album.album_id);
+    if (!url) return;
+    submitDownload(url, 'standard')
+      .then(() => {
+        if (onDownloadStarted) onDownloadStarted({
+          album: album.album,
+          artist: album.artist,
+          provider: album.provider,
+        });
+      })
+      .catch(err => console.error('Album download failed:', err));
+  }, [onDownloadStarted]);
 
   return (
     <div>
@@ -69,6 +120,12 @@ export default function SearchView({ player }) {
         ))}
       </div>
 
+      {error && (
+        <div style={{ padding: '8px 12px', background: 'rgba(255,82,82,0.1)', border: '1px solid var(--red)', borderRadius: 'var(--radius)', marginBottom: 12, color: 'var(--red)', fontSize: '0.82rem' }}>
+          {error}
+        </div>
+      )}
+
       {loading && (
         <div className="empty-state">
           <span className="spinner spinner-lg" />
@@ -76,9 +133,9 @@ export default function SearchView({ player }) {
         </div>
       )}
 
-      {!loading && searched && results.length === 0 && (
+      {!loading && searched && groupedData.length === 0 && (
         <div className="empty-state">
-          <div className="icon">♪</div>
+          <div className="icon">&#9835;</div>
           <h3>No results found</h3>
           <p>Try a different search term or enable more services.</p>
         </div>
@@ -86,36 +143,85 @@ export default function SearchView({ player }) {
 
       {!loading && !searched && (
         <div className="empty-state">
-          <div className="icon">♫</div>
+          <div className="icon">&#9835;</div>
           <h3>Search across Tidal, Qobuz, and Deezer</h3>
           <p>Enter a query above to find music from all your streaming services.</p>
         </div>
       )}
 
-      {results.length > 0 && (
-        <table className="track-table">
-          <thead>
-            <tr>
-              <th style={{ width: 40 }}>#</th>
-              <th>Title</th>
-              <th>Artist</th>
-              <th>Album</th>
-              <th style={{ width: 60 }}>Dur</th>
-              <th style={{ width: 80 }}>Src</th>
-              <th style={{ width: 100 }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {results.map((track, i) => (
-              <TrackRow
-                key={track.id || i}
-                track={track}
-                index={i}
-                player={player}
-              />
-            ))}
-          </tbody>
-        </table>
+      {groupedData.length > 0 && (
+        <div className="grouped-results">
+          {groupedData.map(artistGroup => (
+            <div key={artistGroup.artist} className="artist-section">
+              <div className="artist-header" onClick={() => toggleArtist(artistGroup.artist)}>
+                <span className="expand-icon">{expandedArtists[artistGroup.artist] ? '▾' : '▸'}</span>
+                <h3>{artistGroup.artist}</h3>
+                <span className="artist-track-count">
+                  {countArtistTracks(artistGroup.albums)} track{countArtistTracks(artistGroup.albums) !== 1 ? 's' : ''}
+                </span>
+              </div>
+              {expandedArtists[artistGroup.artist] && (
+                <div className="artist-body">
+                  {artistGroup.albums.map(album => (
+                    <div key={album.album_id || album.album} className="album-card">
+                      <div className="album-card-header">
+                        {album.cover_url ? (
+                          <img
+                            className="album-cover"
+                            src={album.cover_url}
+                            alt={album.album}
+                            onError={e => { e.target.style.display = 'none'; }}
+                          />
+                        ) : (
+                          <div className="album-cover album-cover-placeholder">♪</div>
+                        )}
+                        <div className="album-info">
+                          <h4 className="album-name">{album.album}</h4>
+                          <div className="album-meta">
+                            <span className={`status-badge ${album.provider}`}>{album.provider}</span>
+                            <span className="album-track-count">
+                              {album.tracks.length} track{album.tracks.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="album-actions">
+                          <button
+                            className="btn btn-sm btn-accent"
+                            onClick={(e) => { e.stopPropagation(); handleDownloadAlbum(album); }}
+                          >
+                            Download Album
+                          </button>
+                        </div>
+                      </div>
+                      <table className="track-table album-tracks">
+                        <thead>
+                          <tr>
+                            <th style={{ width: 36 }}>#</th>
+                            <th>Title</th>
+                            <th style={{ width: 60 }}>Dur</th>
+                            <th style={{ width: 80 }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {album.tracks.map((track, i) => (
+                            <TrackRow
+                              key={track.id || i}
+                              track={track}
+                              index={i}
+                              player={player}
+                              onDownload={handleDownloadTrack}
+                              compact
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

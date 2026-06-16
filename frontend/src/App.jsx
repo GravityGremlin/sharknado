@@ -1,15 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import TitleBar from './components/TitleBar';
 import Sidebar from './components/Sidebar';
 import PlayerBar from './components/PlayerBar';
 import SearchView from './components/SearchView';
 import PlaylistView from './components/PlaylistView';
 import DownloadQueue from './components/DownloadQueue';
+import LibraryView from './components/LibraryView';
 import { usePlayer } from './hooks/usePlayer';
+import { submitDownload } from './api/client';
 
 export default function App() {
   const [activeView, setActiveView] = useState('search');
   const [activePlaylistId, setActivePlaylistId] = useState(null);
+  const [downloadRefresh, setDownloadRefresh] = useState(0);
+  const [libraryRefresh, setLibraryRefresh] = useState(0);
   const player = usePlayer();
 
   const navigateTo = (view, playlistId) => {
@@ -17,10 +21,20 @@ export default function App() {
     setActivePlaylistId(playlistId || null);
   };
 
+  const handleLibraryScanned = useCallback((result) => {
+    setLibraryRefresh(t => t + 1);
+    setActiveView('library');
+  }, []);
+
+  const handleDownloadStarted = useCallback(() => {
+    setDownloadRefresh(t => t + 1);
+    setActiveView('downloads');
+  }, []);
+
   const renderContent = () => {
     switch (activeView) {
       case 'search':
-        return <SearchView player={player} />;
+        return <SearchView player={player} onDownloadStarted={handleDownloadStarted} />;
       case 'playlist':
         return <PlaylistView playlistId={activePlaylistId} player={player} />;
       case 'playlists':
@@ -31,30 +45,18 @@ export default function App() {
               <p>Your music collections</p>
             </div>
             <div className="empty-state">
-              <div className="icon">♪</div>
+              <div className="icon">&#9835;</div>
               <h3>No playlists yet</h3>
               <p>Create a playlist from search results to get started.</p>
             </div>
           </div>
         );
       case 'downloads':
-        return <DownloadQueue />;
+        return <DownloadQueue refreshTrigger={downloadRefresh} />;
       case 'library':
-        return (
-          <div>
-            <div className="view-header">
-              <h2>Library</h2>
-              <p>Your downloaded music</p>
-            </div>
-            <div className="empty-state">
-              <div className="icon">♫</div>
-              <h3>No tracks downloaded</h3>
-              <p>Download music from search results and it will appear here.</p>
-            </div>
-          </div>
-        );
+        return <LibraryView player={player} refreshTrigger={libraryRefresh} />;
       default:
-        return <SearchView player={player} />;
+        return <SearchView player={player} onDownloadStarted={handleDownloadStarted} />;
     }
   };
 
@@ -65,6 +67,7 @@ export default function App() {
         activeView={activeView}
         onNavigate={navigateTo}
         activePlaylistId={activePlaylistId}
+        onLibraryScanned={handleLibraryScanned}
       />
       <div className="main-content">
         {renderContent()}
