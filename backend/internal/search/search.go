@@ -327,9 +327,6 @@ func (e *Engine) searchDeezer(ctx context.Context, query string) ([]models.Searc
 	results := make([]models.SearchResult, 0, len(data.Data))
 	for _, t := range data.Data {
 		cover := t.Album.Cover
-		if cover == "" {
-			cover = fmt.Sprintf("https://e-cdns-images.dzcdn.net/images/artist/%s/250x250.jpg", t.Artist.Name)
-		}
 		results = append(results, models.SearchResult{
 			ID:       fmt.Sprintf("deezer:%d", t.ID),
 			Provider: "deezer",
@@ -349,6 +346,10 @@ func (e *Engine) searchDeezer(ctx context.Context, query string) ([]models.Searc
 // ── Tidal Search ───────────────────────────────────────────────────
 
 func (e *Engine) searchTidal(ctx context.Context, query string) ([]models.SearchResult, error) {
+	return e.searchTidalInner(ctx, query, false)
+}
+
+func (e *Engine) searchTidalInner(ctx context.Context, query string, retried bool) ([]models.SearchResult, error) {
 	if e.tidalToken == "" {
 		return nil, fmt.Errorf("tidal token not configured")
 	}
@@ -380,9 +381,11 @@ func (e *Engine) searchTidal(ctx context.Context, query string) ([]models.Search
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 401 {
-		// Try to refresh token
-		if refreshed, refreshErr := e.refreshTidalToken(); refreshed && refreshErr == nil {
-			return e.searchTidal(ctx, query) // retry once
+		// Try to refresh token, but only once
+		if !retried {
+			if refreshed, refreshErr := e.refreshTidalToken(); refreshed && refreshErr == nil {
+				return e.searchTidalInner(ctx, query, true)
+			}
 		}
 		return nil, fmt.Errorf("tidal unauthorized (token expired?)")
 	}
@@ -546,8 +549,9 @@ func (e *Engine) loadQobuzAuth() {
 			parts := strings.SplitN(line, "=", 2)
 			key := strings.TrimSpace(parts[0])
 			val := strings.TrimSpace(parts[1])
-			if idx := strings.Index(val, "#"); idx >= 0 {
-				val = strings.TrimSpace(val[:idx])
+			// Strip inline comments (e.g., `value = "foo" # comment`), but handle '#' inside the string
+			if hIdx := strings.Index(val, " #"); hIdx >= 0 {
+				val = strings.TrimSpace(val[:hIdx])
 			}
 			val = strings.Trim(val, "\"")
 

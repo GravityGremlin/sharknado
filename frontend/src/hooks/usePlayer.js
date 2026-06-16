@@ -1,4 +1,6 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { Howl } from 'howler';
+import { getStreamURL } from '../api/client';
 
 export function usePlayer() {
   const [currentTrack, setCurrentTrack] = useState(null);
@@ -13,19 +15,51 @@ export function usePlayer() {
 
   const play = useCallback((track) => {
     if (track) {
+      if (howlerRef.current) {
+        howlerRef.current.unload();
+      }
+      
+      const sound = new Howl({
+        src: [getStreamURL(track.id)],
+        format: ['opus', 'mp3', 'flac'],
+        html5: true,
+        volume: volume,
+        onplay: () => setIsPlaying(true),
+        onpause: () => setIsPlaying(false),
+        onend: () => {
+          setIsPlaying(false);
+          setProgress(0);
+        },
+        onload: () => {
+          setDuration(sound.duration());
+        }
+      });
+
+      howlerRef.current = sound;
       setCurrentTrack(track);
       setQueueIndex(-1);
     }
+    
+    if (howlerRef.current) {
+      howlerRef.current.play();
+    }
     setIsPlaying(true);
-  }, []);
+  }, [volume]);
 
   const pause = useCallback(() => {
+    if (howlerRef.current) {
+      howlerRef.current.pause();
+    }
     setIsPlaying(false);
   }, []);
 
   const togglePlay = useCallback(() => {
-    setIsPlaying(prev => !prev);
-  }, []);
+    if (isPlaying) {
+      pause();
+    } else {
+      play(currentTrack);
+    }
+  }, [isPlaying, currentTrack, pause, play]);
 
   const next = useCallback(() => {
     if (queue.length > 0 && queueIndex < queue.length - 1) {
@@ -44,12 +78,36 @@ export function usePlayer() {
   }, [queue, queueIndex]);
 
   const seek = useCallback((value) => {
+    if (howlerRef.current) {
+      howlerRef.current.seek(value);
+    }
     setProgress(value);
   }, []);
 
   const setVolume = useCallback((value) => {
+    if (howlerRef.current) {
+      howlerRef.current.volume(value);
+    }
     setVolumeState(value);
   }, []);
+
+  // Update progress bar
+  useEffect(() => {
+    if (!isPlaying) {
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+      return;
+    }
+
+    progressIntervalRef.current = setInterval(() => {
+      if (howlerRef.current) {
+        setProgress(howlerRef.current.seek());
+      }
+    }, 1000);
+
+    return () => {
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    };
+  }, [isPlaying]);
 
   const setQueueAndPlay = useCallback((tracks, startIndex = 0) => {
     setQueue(tracks);

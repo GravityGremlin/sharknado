@@ -19,7 +19,7 @@ import (
 
 // StreamConfig for the streaming pipeline.
 type StreamConfig struct {
-	CacheDir  string
+	CacheDir   string
 	LibraryDir string
 	FFmpegPath string
 }
@@ -63,7 +63,7 @@ func (s *Streamer) Stream(ctx context.Context, sourcePath string, format models.
 
 	// Build FFmpeg command
 	contentType = formatContentType(format)
-	args := s.buildFFmpegArgs(sourcePath, format)
+	args := s.buildFFmpegArgs(sourcePath, format, "pipe:1")
 
 	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
 	cmd.Stderr = os.Stderr
@@ -79,13 +79,14 @@ func (s *Streamer) Stream(ctx context.Context, sourcePath string, format models.
 
 	// Stream output to writer
 	_, err = io.Copy(w, stdout)
-	if err != nil {
-		cmd.Process.Kill()
-		return "", fmt.Errorf("stream output: %w", err)
+
+	// Ensure we wait for the process to exit to avoid zombies
+	if waitErr := cmd.Wait(); waitErr != nil && err == nil {
+		err = waitErr
 	}
 
-	if err := cmd.Wait(); err != nil {
-		return "", fmt.Errorf("ffmpeg finished: %w", err)
+	if err != nil {
+		return "", fmt.Errorf("stream output: %w", err)
 	}
 
 	return contentType, nil
@@ -106,9 +107,7 @@ func (s *Streamer) StreamToFile(ctx context.Context, sourcePath string, format m
 		return "", fmt.Errorf("create cache dir: %w", err)
 	}
 
-	args := s.buildFFmpegArgs(sourcePath, format)
-	// Add output file
-	args = append(args, cachePath)
+	args := s.buildFFmpegArgs(sourcePath, format, cachePath)
 
 	cmd := exec.CommandContext(ctx, s.ffmpegPath, args...)
 	cmd.Stderr = os.Stderr
@@ -155,45 +154,37 @@ func (s *Streamer) FindSourceFile(provider, providerID string) (string, error) {
 }
 
 // buildFFmpegArgs builds the FFmpeg command arguments for transcoding.
-func (s *Streamer) buildFFmpegArgs(sourcePath string, format models.StreamFormat) []string {
+func (s *Streamer) buildFFmpegArgs(sourcePath string, format models.StreamFormat, output string) []string {
 	base := []string{
 		"-i", sourcePath,
 		"-f", string(format),
 	}
 
+	var codecArgs []string
 	switch format {
-	case models.StreamFormatOpus:
-		return append(base,
+	case models.StreamFormatFlac:
+		codecArgs = []string{
+			"-c:a", "flac",
+		}
+	case models.StreamFormatMP3:
+		codecArgs = []string{
+			"-c:a", "libmp3lame",
+			"-b:a", "320k",
+			"-q:a", "0",
+			"-ar", "44100",
+			"-ac", "2",
+		}
+	default:
+		codecArgs = []string{
 			"-c:a", "libopus",
 			"-b:a", "192k",
 			"-vbr", "on",
 			"-application", "audio",
 			"-ar", "48000",
 			"-ac", "2",
-			"pipe:1",
-		)
-	case models.StreamFormatMP3:
-		return append(base,
-			"-c:a", "libmp3lame",
-			"-b:a", "320k",
-			"-q:a", "0",
-			"-ar", "44100",
-			"-ac", "2",
-			"pipe:1",
-		)
-	case models.StreamFormatFlac:
-		return append(base,
-			"-c:a", "flac",
-			"pipe:1",
-		)
-	default:
-		// Default to opus
-		return append(base,
-			"-c:a", "libopus",
-			"-b:a", "192k",
-			"pipe:1",
-		)
+		}
 	}
+	return append(append(base, codecArgs...), output)
 }
 
 func formatContentType(format models.StreamFormat) string {

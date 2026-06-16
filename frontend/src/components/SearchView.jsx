@@ -21,7 +21,6 @@ function countArtistTracks(albums) {
 
 export default function SearchView({ player, onDownloadStarted }) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
   const [groupedData, setGroupedData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [services, setServices] = useState({ tidal: true, qobuz: true });
@@ -44,7 +43,6 @@ export default function SearchView({ player, onDownloadStarted }) {
         .map(([k]) => k)
         .join(',');
       const data = await searchAPI(query, activeServices);
-      setResults(data.results || []);
       setGroupedData(data.grouped || []);
       // Expand all artist sections by default
       const expanded = {};

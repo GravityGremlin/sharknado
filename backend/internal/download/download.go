@@ -158,8 +158,9 @@ func (m *Manager) Delete(id string) error {
 	if !ok {
 		return fmt.Errorf("job not found: %s", id)
 	}
-	if job.Status == "running" && job.CancelFunc != nil {
+	if job.CancelFunc != nil {
 		job.CancelFunc()
+		job.CancelFunc = nil
 	}
 	delete(m.jobs, id)
 	return nil
@@ -171,9 +172,9 @@ func (m *Manager) execute(job *Job) {
 	defer func() { <-m.workers }()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	job.CancelFunc = cancel
 
 	m.mu.Lock()
+	job.CancelFunc = cancel
 	job.Status = "running"
 	job.StartedAt = time.Now().UTC().Format(time.RFC3339)
 	m.mu.Unlock()
@@ -290,6 +291,9 @@ func parseProgress(r interface{ Read([]byte) (int, error) }, job *Job, m *Manage
 			})
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("parseProgress scanner error: %v", err)
+	}
 }
 
 func (m *Manager) broadcast(event string, data any) {
@@ -306,8 +310,12 @@ func generateID() string {
 func ScanDir(dir string) ([]models.Track, error) {
 	var tracks []models.Track
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return err
+		if err != nil {
+			log.Printf("ScanDir walk error at %s: %v", path, err)
+			return nil // Continue walking
+		}
+		if info.IsDir() {
+			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(path))
 		switch ext {
@@ -453,8 +461,8 @@ func parseFilename(t *models.Track, path string) {
 func (m *Manager) importDownloads() {
 	tracks, err := ScanDir(m.dlDir)
 	if err != nil {
-		log.Printf("import scan failed: %v", err)
-		return
+		log.Printf("import scan error: %v", err)
+		// continue with partial tracks
 	}
 	if m.db == nil {
 		return
@@ -470,18 +478,4 @@ func (m *Manager) importDownloads() {
 	if imported > 0 {
 		log.Printf("imported %d tracks from downloads", imported)
 	}
-}
-
-// ImportDownloads is the exported version for use by route handlers.
-func (m *Manager) ImportDownloads() ([]models.Track, error) {
-	tracks, err := ScanDir(m.dlDir)
-	if err != nil {
-		return nil, err
-	}
-	if m.db != nil {
-		for i := range tracks {
-			m.db.InsertTrack(&tracks[i])
-		}
-	}
-	return tracks, nil
 }

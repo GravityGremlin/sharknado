@@ -178,9 +178,16 @@ func (s *Server) handleTrackStream(w http.ResponseWriter, r *http.Request) {
 	}
 	provider, providerID := parts[0], parts[1]
 
-	// Find the source file
-	sourcePath, err := s.player.FindSourceFile(provider, providerID)
-	if err != nil {
+	// Check DB first for file path
+	var sourcePath string
+	if t, err := s.db.GetTrack(id); err == nil && t.FilePath != "" {
+		sourcePath = t.FilePath
+	} else {
+		// Fallback to slower walk over filesystem
+		sourcePath, err = s.player.FindSourceFile(provider, providerID)
+	}
+
+	if sourcePath == "" {
 		writeJSON(w, http.StatusNotFound, map[string]any{
 			"error": "track not downloaded yet",
 			"id":    id,
