@@ -1,0 +1,34 @@
+name: sharknado
+
+services:
+  sharknado:
+    build: .
+    container_name: sharknado
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    ports:
+      - "9563:8000"
+    volumes:
+      # Downloads - where tidal-dl-ng / streamrip write
+      - ./data/downloads:/downloads
+      # Organized library (after import/manual sort)
+      - ./data/library:/library
+      # Converted audio cache (FFmpeg transcodes)
+      - ./data/cache:/cache
+      # SQLite database (playlists, track metadata, download jobs)
+      - ./data:/data
+      # Tidal auth config (tidal-dl-ng settings, tokens, history)
+      - ./data/tidal-config/settings.json:/home/shark/.config/tidal_dl_ng/settings.json
+      - ./data/tidal-config/token.json:/home/shark/.config/tidal_dl_ng/token.json
+      # Qobuz/Deezer auth config (streamrip config.toml)
+      - ./data/streamrip-config/config.toml:/home/shark/.config/streamrip/config.toml
+    environment:
+      - DOWNLOAD_DIR=/downloads
+      - LIBRARY_DIR=/library
+      - CACHE_DIR=/cache
+      - DB_PATH=/data/sharknado.db
+      - TIDAL_CONFIG_DIR=/home/shark/.config/tidal_dl_ng
+      - STREAMRIP_CONFIG_DIR=/home/shark/.config/streamrip
+      - FRONTEND_DIR=/frontend/dist

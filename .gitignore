@@ -1,0 +1,44 @@
+# Dependencies
+frontend/node_modules/
+backend/vendor/
+
+# Build output
+frontend/dist/
+backend/sharknado
+*.exe
+
+# Data (runtime state, auth secrets)
+data/
+!data/.gitkeep
+
+# Logs
+logs/
+
+# Downloaded music (large binary files)
+downloads/
+
+# Library files
+library/
+
+# Cache
+cache/
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yaml
+tidalshark-deep-dive.md
