@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -62,6 +61,11 @@ func NewEngine(cfg Config) *Engine {
 	e.loadTidalAuth()
 
 	return e
+}
+
+// ClearCache clears all cached search results. Called after a download completes.
+func (e *Engine) ClearCache() {
+	e.cache.Clear()
 }
 
 // Search queries all (or specified) providers in parallel and returns merged results.
@@ -224,24 +228,25 @@ func (e *Engine) searchQobuz(ctx context.Context, query string) ([]models.Search
 }
 
 func (e *Engine) searchQobuzWithRip(ctx context.Context, query string, apiErr error) ([]models.SearchResult, error) {
-	out, err := os.CreateTemp("", "sharknado-qobuz-*.json")
-	if err != nil {
-		return nil, fmt.Errorf("%v; create rip output: %w", apiErr, err)
-	}
-	outPath := out.Name()
-	out.Close()
-	defer os.Remove(outPath)
-
-	cmd := exec.CommandContext(ctx, "rip", "search", "qobuz", "track", query, "-n", "15", "-o", outPath)
+	cmd := exec.CommandContext(ctx, "rip", "search", "qobuz", "track", query, "-n", "15")
 	cmd.Env = append(os.Environ(), "PATH=/usr/local/bin:/usr/bin:/bin")
-	output, err := cmd.CombinedOutput()
+
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, fmt.Errorf("%v; qobuz rip fallback failed: %w: %s", apiErr, err, strings.TrimSpace(string(output)))
+		return nil, fmt.Errorf("%v; create rip stdout pipe: %w", apiErr, err)
 	}
 
-	data, err := os.ReadFile(outPath)
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("%v; start rip: %w: %s", apiErr, err, err.Error())
+	}
+
+	data, err := io.ReadAll(stdout)
 	if err != nil {
 		return nil, fmt.Errorf("%v; read rip output: %w", apiErr, err)
+	}
+
+	if waitErr := cmd.Wait(); waitErr != nil {
+		return nil, fmt.Errorf("%v; rip failed: %w", apiErr, waitErr)
 	}
 
 	var items []struct {
@@ -631,23 +636,4 @@ func defaultStreamripConfigPath() string {
 func defaultTidalTokenPath() string {
 	home, _ := os.UserHomeDir()
 	return home + "/.config/tidal_dl_ng/token.json"
-}
-
-// ParseID splits "provider:id" into provider and id parts.
-func ParseID(id string) (provider, providerID string) {
-	parts := strings.SplitN(id, ":", 2)
-	if len(parts) == 2 {
-		return parts[0], parts[1]
-	}
-	return "", id
-}
-
-// FormatDuration formats seconds as m:ss.
-func FormatDuration(d float64) string {
-	if d <= 0 {
-		return "0:00"
-	}
-	m := int(d) / 60
-	s := int(d) % 60
-	return strconv.Itoa(m) + ":" + strconv.Itoa(s)
 }

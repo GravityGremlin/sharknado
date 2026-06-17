@@ -23,9 +23,13 @@ function buildProviderURL(track) {
   }
 }
 
-export default function TrackRow({ track, index, player, onDownload, compact }) {
+export default function TrackRow({ track, index, player, onDownload, compact, onPlay }) {
   const handlePlay = () => {
-    player.play(track);
+    if (onPlay) {
+      onPlay();
+    } else {
+      player.play(track);
+    }
   };
 
   const handleDownload = async () => {

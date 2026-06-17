@@ -8,7 +8,6 @@ export default function TitleBar({ connected }) {
       <div className="service-indicators">
         <span className="svc tidal on">TIDAL</span>
         <span className="svc qobuz on">QOBUZ</span>
-        <span className="svc deezer on">DEEZER</span>
       </div>
     </div>
   );

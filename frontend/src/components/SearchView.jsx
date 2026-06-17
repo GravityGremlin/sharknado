@@ -5,11 +5,26 @@ import { search as searchAPI, submitDownload } from '../api/client';
 function buildAlbumUrl(provider, albumId) {
   switch (provider) {
     case 'qobuz':
-      return `https://www.qobuz.com/album/x/${albumId}`;
+      return `https://www.qobuz.com/album/${albumId}`;
     case 'tidal':
       return `https://tidal.com/album/${albumId}`;
     case 'deezer':
       return `https://www.deezer.com/album/${albumId}`;
+    default:
+      return '';
+  }
+}
+
+function buildProviderURL(track) {
+  const id = track.provider_id || track.id?.split(':').pop();
+  if (!id) return '';
+  switch (track.provider) {
+    case 'tidal':
+      return `https://tidal.com/track/${id}`;
+    case 'qobuz':
+      return `https://www.qobuz.com/track/${id}`;
+    case 'deezer':
+      return `https://www.deezer.com/track/${id}`;
     default:
       return '';
   }
@@ -62,8 +77,17 @@ export default function SearchView({ player, onDownloadStarted }) {
     if (e.key === 'Enter') doSearch();
   }, [doSearch]);
 
-  const handleDownloadTrack = useCallback((track) => {
-    if (onDownloadStarted) onDownloadStarted(track);
+  const handleDownloadTrack = useCallback(async (track) => {
+    const url = track.url || (track.provider_id 
+      ? buildProviderURL(track) 
+      : buildAlbumUrl(track.provider, track.album_id));
+    if (!url) return;
+    try {
+      await submitDownload(url, 'standard');
+      if (onDownloadStarted) onDownloadStarted();
+    } catch (err) {
+      console.error('Track download failed:', err);
+    }
   }, [onDownloadStarted]);
 
   const toggleArtist = useCallback((artist) => {

@@ -85,6 +85,7 @@ func (m *Manager) Submit(url, service, quality string) *models.DownloadJob {
 			Status:    "queued",
 			Quality:   quality,
 			CreatedAt: time.Now().UTC().Format(time.RFC3339),
+			Progress:  0,
 		},
 	}
 
@@ -138,7 +139,9 @@ func (m *Manager) Pause(id string) error {
 		job.CancelFunc()
 		job.CancelFunc = nil
 	}
+	job.Progress = job.getProgress()
 	m.broadcast("job.updated", job.DownloadJob)
+	m.persistJob(job)
 	return nil
 }
 
@@ -156,7 +159,9 @@ func (m *Manager) Cancel(id string) error {
 		job.CancelFunc()
 		job.CancelFunc = nil
 	}
+	job.Progress = job.getProgress()
 	m.broadcast("job.updated", job.DownloadJob)
+	m.persistJob(job)
 	return nil
 }
 
@@ -173,6 +178,26 @@ func (m *Manager) Delete(id string) error {
 		job.CancelFunc = nil
 	}
 	delete(m.jobs, id)
+	return nil
+}
+
+// Resume resumes a paused or failed job.
+func (m *Manager) Resume(id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	job, ok := m.jobs[id]
+	if !ok {
+		return fmt.Errorf("job not found: %s", id)
+	}
+	if job.Status != "paused" && job.Status != "failed" {
+		return fmt.Errorf("job is not paused or failed")
+	}
+	job.Status = "queued"
+	job.ErrorMsg = ""
+	job.atomProgress.Store(0)
+	m.broadcast("job.updated", job.DownloadJob)
+	m.persistJob(job)
+	go m.execute(job)
 	return nil
 }
 
@@ -271,12 +296,14 @@ func (m *Manager) execute(job *Job) {
 		job.ErrorMsg = err.Error()
 	} else {
 		job.Status = "completed"
-		job.Progress = 100
+		job.atomProgress.Store(10000)
 		// Auto-import downloaded files
 		go m.importDownloads()
 	}
 	job.FinishedAt = time.Now().UTC().Format(time.RFC3339)
+	job.Progress = job.getProgress()
 	m.broadcast("job.updated", job.DownloadJob)
+	m.persistJob(job)
 }
 
 // DetectProvider guesses the provider from a URL.
@@ -294,8 +321,9 @@ func DetectProvider(url string) string {
 }
 
 // progressRegex matches download progress indicators from CLI tools.
-var progressRegex = regexp.MustCompile(`(\d+)%`)
-var albumRegex = regexp.MustCompile(`(?i)album|track|downloading|converting`)
+// Matches: "10%", "[####....] 45%", "Track 1/5 - 20%", etc.
+var progressRegex = regexp.MustCompile(`(\d+)%|(\d+)/(\d+)`)
+var albumRegex = regexp.MustCompile(`(?i)album|track|downloading|converting|finish|complete|downloaded`)
 
 func parseProgress(r interface{ Read([]byte) (int, error) }, job *Job, m *Manager) {
 	scanner := bufio.NewScanner(r)
@@ -307,14 +335,28 @@ func parseProgress(r interface{ Read([]byte) (int, error) }, job *Job, m *Manage
 			continue
 		}
 
-		// Try to extract percentage
+		// Try to extract percentage (X% format)
 		if matches := progressRegex.FindStringSubmatch(text); len(matches) > 1 {
-			if pct, e := strconv.Atoi(matches[1]); e == nil {
-				m.mu.Lock()
-				job.Progress = float64(pct)
-				update := job.DownloadJob
-				m.mu.Unlock()
-				m.broadcast("job.updated", update)
+			// First capture group is percentage
+			if matches[1] != "" {
+				if pct, e := strconv.Atoi(matches[1]); e == nil {
+					job.atomProgress.Store(int64(pct * 100))
+					progressUpdate := job.DownloadJob
+					progressUpdate.Progress = job.getProgress()
+					m.broadcast("job.updated", progressUpdate)
+				}
+			}
+			// Second capture group is X/Y format (current/total)
+			if matches[2] != "" && matches[3] != "" {
+				if current, e1 := strconv.Atoi(matches[2]); e1 == nil {
+					if total, e2 := strconv.Atoi(matches[3]); e2 == nil && total > 0 {
+						pct := (current * 100) / total
+						job.atomProgress.Store(int64(pct * 100))
+						progressUpdate := job.DownloadJob
+						progressUpdate.Progress = job.getProgress()
+						m.broadcast("job.updated", progressUpdate)
+					}
+				}
 			}
 		}
 
@@ -334,6 +376,27 @@ func parseProgress(r interface{ Read([]byte) (int, error) }, job *Job, m *Manage
 func (m *Manager) broadcast(event string, data any) {
 	if m.broker != nil {
 		m.broker.Broadcast(event, data)
+	}
+}
+
+// persistJob writes the job state to the database.
+func (m *Manager) persistJob(job *Job) {
+	if m.db == nil {
+		return
+	}
+	_, err := m.db.Exec(`INSERT INTO download_jobs
+		(id, url, service, status, quality, progress, error_msg, created_at, started_at, finished_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			status = excluded.status,
+			progress = excluded.progress,
+			error_msg = excluded.error_msg,
+			started_at = excluded.started_at,
+			finished_at = excluded.finished_at`,
+		job.ID, job.URL, job.Service, job.Status, job.Quality,
+		job.getProgress(), job.ErrorMsg, job.CreatedAt, job.StartedAt, job.FinishedAt)
+	if err != nil {
+		log.Printf("persist job %s: %v", job.ID, err)
 	}
 }
 
@@ -514,5 +577,7 @@ func (m *Manager) importDownloads() {
 	}
 	if imported > 0 {
 		log.Printf("imported %d tracks from downloads", imported)
+		// Request a cache clear to update search results with "downloaded: true"
+		m.broadcast("library.updated", nil)
 	}
 }

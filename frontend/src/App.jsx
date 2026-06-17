@@ -7,6 +7,7 @@ import PlaylistView from './components/PlaylistView';
 import DownloadQueue from './components/DownloadQueue';
 import LibraryView from './components/LibraryView';
 import { usePlayer } from './hooks/usePlayer';
+import { useSSE } from './hooks/useSSE';
 import { submitDownload } from './api/client';
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
   const [downloadRefresh, setDownloadRefresh] = useState(0);
   const [libraryRefresh, setLibraryRefresh] = useState(0);
   const player = usePlayer();
+  const sse = useSSE('/api/events');
 
   const navigateTo = (view, playlistId) => {
     setActiveView(view);
@@ -61,16 +63,18 @@ export default function App() {
   };
 
   return (
-    <div className="app-layout">
-      <TitleBar connected={true} />
-      <Sidebar
-        activeView={activeView}
-        onNavigate={navigateTo}
-        activePlaylistId={activePlaylistId}
-        onLibraryScanned={handleLibraryScanned}
-      />
-      <div className="main-content">
-        {renderContent()}
+    <div className="layout">
+      <TitleBar connected={sse.connected} />
+      <div className="main">
+        <Sidebar
+          activeView={activeView}
+          onNavigate={navigateTo}
+          activePlaylistId={activePlaylistId}
+          onLibraryScanned={handleLibraryScanned}
+        />
+        <div className="main-content">
+          {renderContent()}
+        </div>
       </div>
       <PlayerBar player={player} />
     </div>

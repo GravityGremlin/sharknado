@@ -91,11 +91,11 @@ export default function LibraryView({ player, refreshTrigger }) {
           <tbody>
             {tracks.map((track, i) => (
               <TrackRow
-                key={track.id || i}
+                key={track.id || track.path || i}
                 track={track}
                 index={i}
                 player={player}
-                onDownload={() => {}}
+                onPlay={() => player.setQueueAndPlay(tracks, i)}
               />
             ))}
           </tbody>

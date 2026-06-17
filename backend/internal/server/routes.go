@@ -41,8 +41,10 @@ func (s *Server) registerRoutes() {
 	mux.HandleFunc("DELETE /api/playlists/{id}", s.handlePlaylistDelete)
 	mux.HandleFunc("POST /api/playlists/{id}/tracks", s.handlePlaylistAddTrack)
 	mux.HandleFunc("DELETE /api/playlists/{id}/tracks/{trackId}", s.handlePlaylistRemoveTrack)
+	mux.HandleFunc("GET /api/playlists/{id}/tracks", s.handlePlaylistGetTracks)
 	mux.HandleFunc("GET /api/library", s.handleLibraryList)
 	mux.HandleFunc("POST /api/library/scan", s.handleLibraryScan)
+	mux.HandleFunc("GET /api/library/next/{trackId}", s.handleNextTrack)
 	mux.HandleFunc("GET /api/events", s.broker.ServeHTTP)
 
 	// ── Static frontend ───────────────────────────────────────────
@@ -425,6 +427,20 @@ func (s *Server) handlePlaylistRemoveTrack(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) handlePlaylistGetTracks(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	tracks, err := s.db.ListPlaylistTracks(id)
+	if err != nil {
+		log.Printf("get playlist tracks %s: %v", id, err)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "playlist not found or empty"})
+		return
+	}
+	if tracks == nil {
+		tracks = []models.Track{}
+	}
+	writeJSON(w, http.StatusOK, tracks)
+}
+
 // ── Library ─────────────────────────────────────────────────────────
 
 func (s *Server) handleLibraryList(w http.ResponseWriter, r *http.Request) {
@@ -470,6 +486,25 @@ func (s *Server) handleLibraryScan(w http.ResponseWriter, r *http.Request) {
 		"found":    len(allTracks),
 		"imported": imported,
 	})
+}
+
+// ── Next Track for Auto-Play ───────────────────────────────────────
+
+func (s *Server) handleNextTrack(w http.ResponseWriter, r *http.Request) {
+	trackID := r.PathValue("trackId")
+	if trackID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "trackId is required"})
+		return
+	}
+
+	nextTrack, err := s.db.GetNextTrack(trackID)
+	if err != nil {
+		log.Printf("get next track %s: %v", trackID, err)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no next track found"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, nextTrack)
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────

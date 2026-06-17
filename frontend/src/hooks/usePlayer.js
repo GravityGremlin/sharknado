@@ -29,6 +29,7 @@ export function usePlayer() {
         onend: () => {
           setIsPlaying(false);
           setProgress(0);
+          next();
         },
         onload: () => {
           setDuration(sound.duration());
@@ -125,6 +126,15 @@ export function usePlayer() {
       play(tracks[startIndex]);
     }
   }, [play]);
+
+  // Unload on unmount
+  useEffect(() => {
+    return () => {
+      if (howlerRef.current) {
+        howlerRef.current.unload();
+      }
+    };
+  }, []);
 
   return {
     currentTrack,

@@ -51,6 +51,16 @@ func NewServer(cfg *config.Config, db *library.DB, broker *events.EventBroker) *
 		DB:            db,
 	})
 
+	// Start a listener for library updates to clear search cache
+	go func() {
+		_, ch := s.broker.Subscribe()
+		for msg := range ch {
+			if strings.Contains(string(msg), "event: library.updated") {
+				s.search.ClearCache()
+			}
+		}
+	}()
+
 	// Initialize player/streamer
 	s.player = player.NewStreamer(player.StreamConfig{
 		CacheDir:   cfg.CacheDir,

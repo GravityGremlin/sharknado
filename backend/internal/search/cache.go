@@ -71,6 +71,12 @@ func (c *searchCache) set(query string, services []string, results []models.Sear
 	}
 }
 
+func (c *searchCache) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries = make(map[string]cacheEntry)
+}
+
 func (c *searchCache) evictOldest() {
 	var oldestKey string
 	var oldestTime time.Time

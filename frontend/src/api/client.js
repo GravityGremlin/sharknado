@@ -14,7 +14,7 @@ async function request(path, options = {}) {
 }
 
 // Search
-export async function search(query, services = 'tidal,qobuz,deezer') {
+export async function search(query, services = 'tidal,qobuz') {
   return request(`/api/search?q=${encodeURIComponent(query)}&services=${encodeURIComponent(services)}`);
 }
 
