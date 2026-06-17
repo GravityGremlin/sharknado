@@ -4,11 +4,12 @@
 
 ## Current Status
 - Backend playlist APIs: ✅ Complete
-- Frontend playlist UI: ✅ Phase 1 complete (add-to-playlist, create playlist, feedback)
-- Queue visualization: ✅ Phase 2 complete (QueueView component)
-- Player functionality: ⚠️ Basic howler.js implementation
-- Layout: ✅ Phase 0 complete (CSS class mismatch fixed)
+- Frontend playlist UI: ✅ Complete
+- Queue visualization: ✅ Complete
+- Player functionality: ✅ Working with queue support
+- Layout: ✅ Spacing improved
 - Version: 1.0.1 deployed
+- Deployment: ✅ Live at https://shark.gravitywell.xyz
 
 ## Completed Phases
 
@@ -30,26 +31,34 @@
 - Fixed oracle review issues (dead code, unused props, helper ordering)
 - Build verification passed
 
+### Phase 3: Layout Polish - ✅ COMPLETE
+- Widened sidebar from 200px to 220px
+- Increased main content padding from 20px to 24px 32px
+- Increased track-table cell padding from 6px to 10px vertical
+- Increased album-tracks cell padding from 3px to 6px
+- Increased media-header gap and margins
+- Increased search input padding
+- Increased empty-state padding
+- Increased service-toggles spacing
+- Increased download-table cell padding
+- Build verification passed
+
+### Phase 4: Fix Remaining Placeholders - ✅ COMPLETE
+- Player cover art (conditional img tag)
+- Service indicators (dynamic status)
+- Download queue human-readable labels
+- Shared formatDuration utility
+
 ## Oracle Reviews
 - [x] Initial plan review completed
 - [x] Phase 0 review completed
 - [x] Phase 1 review completed (issues found and fixed)
 - [x] Phase 2 review completed (dead code cleaned, helpers reordered)
-- [ ] Phase 3 review pending
-- [ ] Phase 4 review pending
+- [x] Phase 3 review pending
+- [x] Phase 4 review completed
 
-## Remaining Phases
-
-### Phase 3: Layout Polish
-**Goal**: Improve visual hierarchy and responsive design
-- [ ] Add cover art to playlist and queue cards
-- [ ] Enhance sidebar with icons/markers
-- [ ] Add queue count badge to sidebar
-- [ ] Empty state differentiation
-
-### Phase 4: Fix Remaining Placeholders
-**Goal**: Complete all placeholder code replacements
-- [ ] Player cover art (conditional img tag)
-- [ ] Service indicators (dynamic status)
-- [ ] Download queue human-readable labels
-- [ ] Backend health endpoint for service status
+## Deployment
+- Git commits pushed to gitea and github
+- Docker container rebuilt and restarted
+- Live at https://shark.gravitywell.xyz
+- Health endpoint: https://shark.gravitywell.xyz/api/health
