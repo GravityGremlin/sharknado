@@ -60,18 +60,16 @@ export default function App() {
   return (
     <div className="app-layout">
       <TitleBar connected={sse.connected} />
-      <div className="main">
-        <Sidebar
-          activeView={activeView}
-          onNavigate={navigateTo}
-          activePlaylistId={activePlaylistId}
-          onLibraryScanned={handleLibraryScanned}
-          playlistRefresh={playlistRefresh}
-          player={player}
-        />
-        <div className="main-content">
-          {renderContent()}
-        </div>
+      <Sidebar
+        activeView={activeView}
+        onNavigate={navigateTo}
+        activePlaylistId={activePlaylistId}
+        onLibraryScanned={handleLibraryScanned}
+        playlistRefresh={playlistRefresh}
+        player={player}
+      />
+      <div className="main-content">
+        {renderContent()}
       </div>
       <PlayerBar player={player} />
     </div>

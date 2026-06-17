@@ -1,71 +1,45 @@
-# Sharknado Deepwork Session - Major Layout Redesign
+# Sharknado Deepwork Session - Audit to Complete
 
-## Session Date: 2026-06-17
+## Session Date
+2026-06-17
 
-## Current Status
-- Version: 1.0.2 deployed
-- Backend APIs: ✅ Complete
-- Playlist/Queue: ✅ Working
-- Layout: ❌ Backwards - search in sidebar, main area empty
+## Current Repo State
+- Latest committed deployment: `be0d161` major layout redesign, version 1.0.3.
+- Current uncommitted continuation:
+  - `frontend/src/App.jsx`: removed `.main` wrapper so `Sidebar` and `main-content` remain direct `app-layout` grid children.
+  - `frontend/src/components/SearchView.jsx`: search remains main-panel card grid, add-to-playlist restored via modal, Escape closes modal, version-facing layout work ready.
+  - `frontend/src/styles/napster.css`: sidebar hierarchy, search header, source pills, result cards, modal form styles, desktop-first responsive breakpoint.
+  - `frontend/src/version.js`: bumped visible UI version to `1.0.4`.
 
-## Problem Statement
-The layout is fundamentally inverted:
-- Sidebar (220px) contains: Search bar, source filters, results (cramped)
-- Main area (80% of screen): Completely empty
-- Player bar at bottom: Full width, correct
+## Confirmed User Requirements
+- Desktop-first UI, not mobile-first.
+- Sidebar should be pure navigation around 200px wide.
+- Main area should carry search, source filters, and result cards.
+- The bottom player remains full-width and pinned.
+- Version number must increment on each visible deployed change.
+- Continue using deepwork: plan, oracle review, phase execution, validation, phase review, fix issues, then deploy.
 
-## Target Layout
-```
-[Sidebar 200px - Nav Only] | [Main Area - Search + Results Grid]
-  BROWSE                   |  [Search Input Full Width] [TIDAL] [QOBUZ]
-    Search                 |  ----------------------------------------
-    Library                |  Results: Album/Track cards in grid
-    Downloads              |
-    Queue (0)              |
-                           |
-  PLAYLISTS                |
-    + New Playlist         |
-                           |
-[Player Bar - Full Width, Pinned Bottom]
-```
+## Oracle Plan Review Reconciled
+Oracle verdict: sound but not airtight.
 
-## Phased Implementation Plan
+Must-fix items completed:
+1. Removed `.main` wrapper layout foot-gun from `App.jsx`; sidebar and content are direct grid children again.
+2. Added Escape-key dismissal for the playlist modal in `SearchView.jsx`.
 
-### Phase 1: Restructure App Layout & Sidebar
-- Move SearchView out of sidebar into Main area
-- Sidebar = pure navigation (Browse, Library, Downloads, Queue, Playlists)
-- Update App.jsx routing to render SearchView in main area
-- Sidebar width: 200px fixed
+Safe-to-defer items:
+- Extract shared playlist picker component.
+- Unify TrackRow inline picker and SearchView modal UX.
+- Add modal ARIA details.
+- Clamp long `results-summary` query text.
 
-### Phase 2: Search Bar in Main Area
-- SearchView becomes header of main content area
-- Search input full width
-- Source toggles as subtle pills near search
-- Search button secondary
+## Validation
+- `npm --prefix frontend run build`: passed.
+- `go build ./...` in backend: passed.
 
-### Phase 3: Results Grid Layout
-- Replace grouped list with responsive card grid
-- Album art cards with track info overlay
-- Hover states for play/download actions
-- Empty state: featured/recent content
-
-### Phase 4: Typography & Visual Hierarchy
-- Stronger section labels in sidebar
-- Better weight differentiation
-- Subtle source toggle pills
-- Consistent spacing system
-
-### Phase 5: Responsive & Polish
-- Mobile breakpoint adjustments
-- Card grid responsiveness
-- Performance: CSS containment, lazy loading
-
-## Oracle Review Required
-- [ ] Phase 1 plan review
-- [ ] Phase 2-3 implementation review
-- [ ] Phase 4-5 review
-
-## Build/Deploy
-- [ ] Build verification
-- [ ] Docker rebuild
-- [ ] Deploy to shark.gravitywell.xyz
+## Pending Final Review
+Ask oracle to review the phase result for:
+- Layout correctness after removing `.main` wrapper.
+- Search card add-to-playlist logic.
+- Escape handler correctness.
+- Readability/simplification feedback.
+- Any must-fix issues before deploy.
