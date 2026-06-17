@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import PlayerBar from './components/PlayerBar';
 import SearchView from './components/SearchView';
 import PlaylistView from './components/PlaylistView';
+import PlaylistsView from './components/PlaylistsView';
 import DownloadQueue from './components/DownloadQueue';
 import LibraryView from './components/LibraryView';
 import { usePlayer } from './hooks/usePlayer';
@@ -15,6 +16,7 @@ export default function App() {
   const [activePlaylistId, setActivePlaylistId] = useState(null);
   const [downloadRefresh, setDownloadRefresh] = useState(0);
   const [libraryRefresh, setLibraryRefresh] = useState(0);
+  const [playlistRefresh, setPlaylistRefresh] = useState(0);
   const player = usePlayer();
   const sse = useSSE('/api/events');
 
@@ -33,6 +35,10 @@ export default function App() {
     setActiveView('downloads');
   }, []);
 
+  const handlePlaylistCreated = useCallback(() => {
+    setPlaylistRefresh(t => t + 1);
+  }, []);
+
   const renderContent = () => {
     switch (activeView) {
       case 'search':
@@ -40,19 +46,7 @@ export default function App() {
       case 'playlist':
         return <PlaylistView playlistId={activePlaylistId} player={player} />;
       case 'playlists':
-        return (
-          <div>
-            <div className="view-header">
-              <h2>Playlists</h2>
-              <p>Your music collections</p>
-            </div>
-            <div className="empty-state">
-              <div className="icon">&#9835;</div>
-              <h3>No playlists yet</h3>
-              <p>Create a playlist from search results to get started.</p>
-            </div>
-          </div>
-        );
+        return <PlaylistsView onNavigate={navigateTo} playlistRefresh={playlistRefresh} />;
       case 'downloads':
         return <DownloadQueue refreshTrigger={downloadRefresh} />;
       case 'library':
@@ -71,6 +65,7 @@ export default function App() {
           onNavigate={navigateTo}
           activePlaylistId={activePlaylistId}
           onLibraryScanned={handleLibraryScanned}
+          playlistRefresh={playlistRefresh}
         />
         <div className="main-content">
           {renderContent()}

@@ -1,14 +1,25 @@
-import React, { useState } from 'react';
-import { scanLibrary } from '../api/client';
+import React, { useState, useEffect } from 'react';
+import { scanLibrary, getPlaylists } from '../api/client';
 
-export default function Sidebar({ activeView, onNavigate, activePlaylistId, onLibraryScanned }) {
-  // Placeholder playlists for nav
-  const playlists = [
-    { id: 'pl-1', name: 'Favorites' },
-    { id: 'pl-2', name: 'Recently Added' },
-  ];
-
+export default function Sidebar({ activeView, onNavigate, activePlaylistId, onLibraryScanned, playlistRefresh }) {
+  const [playlists, setPlaylists] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+
+  useEffect(() => {
+    const loadPlaylists = async () => {
+      setLoading(true);
+      try {
+        const data = await getPlaylists();
+        setPlaylists(data.playlists || []);
+      } catch (err) {
+        console.error('Failed to load playlists:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadPlaylists();
+  }, [playlistRefresh]);
 
   const handleScan = async () => {
     setScanning(true);
@@ -61,19 +72,24 @@ export default function Sidebar({ activeView, onNavigate, activePlaylistId, onLi
         >
           Playlists
         </div>
-        {playlists.map(pl => (
-          <div
-            key={pl.id}
-            className={`sidebar-playlist-item ${activeView === 'playlist' && activePlaylistId === pl.id ? 'active' : ''}`}
-            onClick={() => onNavigate('playlist', pl.id)}
-          >
-            {pl.name}
+        {loading ? (
+          <div className="sidebar-playlist-item" style={{ color: 'var(--text3)' }}>
+            Loading...
           </div>
-        ))}
-        {playlists.length === 0 && (
+        ) : playlists.length === 0 ? (
           <div style={{ padding: '4px 16px 4px 32px', fontSize: '0.75rem', color: 'var(--text3)' }}>
             No playlists yet
           </div>
+        ) : (
+          playlists.map(pl => (
+            <div
+              key={pl.id}
+              className={`sidebar-playlist-item ${activeView === 'playlist' && activePlaylistId === pl.id ? 'active' : ''}`}
+              onClick={() => onNavigate('playlist', pl.id)}
+            >
+              {pl.name}
+            </div>
+          ))
         )}
       </div>
     </nav>

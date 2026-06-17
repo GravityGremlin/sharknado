@@ -1,5 +1,5 @@
-import React from 'react';
-import { submitDownload } from '../api/client';
+import React, { useState } from 'react';
+import { submitDownload, getPlaylists, addTrackToPlaylist } from '../api/client';
 
 function formatDuration(seconds) {
   if (!seconds || isNaN(seconds)) return '0:00';
@@ -24,6 +24,10 @@ function buildProviderURL(track) {
 }
 
 export default function TrackRow({ track, index, player, onDownload, compact, onPlay }) {
+  const [showPlaylistPicker, setShowPlaylistPicker] = useState(false);
+  const [playlists, setPlaylists] = useState([]);
+  const [selectedPlaylist, setSelectedPlaylist] = useState('');
+
   const handlePlay = () => {
     if (onPlay) {
       onPlay();
@@ -39,6 +43,35 @@ export default function TrackRow({ track, index, player, onDownload, compact, on
       if (onDownload) onDownload(track);
     } catch (err) {
       console.error('Download failed:', err);
+    }
+  };
+
+  const handleAddToPlaylist = async (playlistId) => {
+    if (!playlistId) return;
+    try {
+      await addTrackToPlaylist(playlistId, track.id);
+      setShowPlaylistPicker(false);
+    } catch (err) {
+      console.error('Failed to add track to playlist:', err);
+    }
+  };
+
+  const loadPlaylists = async () => {
+    try {
+      const data = await getPlaylists();
+      setPlaylists(data.playlists || []);
+    } catch (err) {
+      console.error('Failed to load playlists:', err);
+    }
+  };
+
+  const handlePickerClick = (e) => {
+    e.stopPropagation();
+    if (showPlaylistPicker) {
+      setShowPlaylistPicker(false);
+    } else {
+      loadPlaylists();
+      setShowPlaylistPicker(true);
     }
   };
 
@@ -77,7 +110,42 @@ export default function TrackRow({ track, index, player, onDownload, compact, on
       </td>
       <td className="track-actions">
         <button className="play-btn" onClick={handlePlay} title="Play">&#9654;</button>
-        <button title="Add to playlist" onClick={() => {}}>+</button>
+        <div className="playlist-picker-wrapper">
+          <button className="add-btn" title="Add to playlist" onClick={handlePickerClick}>+</button>
+          {showPlaylistPicker && (
+            <div className="playlist-picker" onClick={e => e.stopPropagation()}>
+              {playlists.length === 0 ? (
+                <div className="playlist-picker-empty">
+                  No playlists yet
+                </div>
+              ) : (
+                <select
+                  value={selectedPlaylist}
+                  onChange={e => setSelectedPlaylist(e.target.value)}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <option value="">-- Select Playlist --</option>
+                  {playlists.map(pl => (
+                    <option key={pl.id} value={pl.id}>{pl.name}</option>
+                  ))}
+                </select>
+              )}
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => handleAddToPlaylist(selectedPlaylist)}
+                disabled={!selectedPlaylist}
+              >
+                Add
+              </button>
+              <button
+                className="btn btn-sm"
+                onClick={() => setShowPlaylistPicker(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
         <button className="dl-btn" onClick={handleDownload} title="Download">&#11015;</button>
       </td>
     </tr>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import TrackRow from './TrackRow';
-import { getPlaylist } from '../api/client';
+import { getPlaylist, removeTrackFromPlaylist } from '../api/client';
 
 export default function PlaylistView({ playlistId, player }) {
   const [playlist, setPlaylist] = useState(null);
@@ -35,6 +35,25 @@ export default function PlaylistView({ playlistId, player }) {
     );
   }
 
+  const handlePlayTrack = (tracks, index) => {
+    player.setQueueAndPlay(tracks, index);
+  };
+
+  const handleRemoveTrack = async (trackId) => {
+    if (!playlistId) return;
+    try {
+      await removeTrackFromPlaylist(playlistId, trackId);
+      setPlaylist(prev => ({
+        ...prev,
+        tracks: (prev.tracks || []).filter(t => t.id !== trackId)
+      }));
+    } catch (err) {
+      console.error('Failed to remove track:', err);
+    }
+  };
+
+  const tracks = playlist.tracks || [];
+
   return (
     <div>
       <div className="media-header">
@@ -44,12 +63,12 @@ export default function PlaylistView({ playlistId, player }) {
           <h1>{playlist.name}</h1>
           <div className="sub">{playlist.description}</div>
           <div className="info-line">
-            {(playlist.tracks || []).length} tracks
+            {tracks.length} tracks
           </div>
         </div>
       </div>
 
-      {(!playlist.tracks || playlist.tracks.length === 0) && (
+      {tracks.length === 0 && (
         <div className="empty-state">
           <div className="icon">♪</div>
           <h3>No tracks in this playlist</h3>
@@ -57,7 +76,7 @@ export default function PlaylistView({ playlistId, player }) {
         </div>
       )}
 
-      {playlist.tracks && playlist.tracks.length > 0 && (
+      {tracks.length > 0 && (
         <table className="track-table">
           <thead>
             <tr>
@@ -66,16 +85,18 @@ export default function PlaylistView({ playlistId, player }) {
               <th>Artist</th>
               <th>Album</th>
               <th style={{ width: 60 }}>Dur</th>
-              <th style={{ width: 80 }}>Actions</th>
+              <th style={{ width: 120 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {playlist.tracks.map((track, i) => (
+            {tracks.map((track, i) => (
               <TrackRow
                 key={track.id || i}
                 track={track}
                 index={i}
                 player={player}
+                compact
+                onPlay={() => handlePlayTrack(tracks, i)}
               />
             ))}
           </tbody>
