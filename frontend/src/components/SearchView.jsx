@@ -34,6 +34,18 @@ function countArtistTracks(albums) {
   return albums.reduce((sum, a) => sum + a.tracks.length, 0);
 }
 
+function flattenResults(groupedData) {
+  const tracks = [];
+  groupedData.forEach(group => {
+    group.albums.forEach(album => {
+      album.tracks.forEach(track => {
+        tracks.push({ ...track, album, artist: group.artist });
+      });
+    });
+  });
+  return tracks;
+}
+
 export default function SearchView({ player, onDownloadStarted, onPlaylistCreated }) {
   const [query, setQuery] = useState('');
   const [groupedData, setGroupedData] = useState([]);
@@ -41,7 +53,6 @@ export default function SearchView({ player, onDownloadStarted, onPlaylistCreate
   const [services, setServices] = useState({ tidal: true, qobuz: true });
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState(null);
-  const [expandedArtists, setExpandedArtists] = useState({});
 
   const toggleService = useCallback((svc) => {
     setServices(prev => ({ ...prev, [svc]: !prev[svc] }));
@@ -59,10 +70,6 @@ export default function SearchView({ player, onDownloadStarted, onPlaylistCreate
         .join(',');
       const data = await searchAPI(query, activeServices);
       setGroupedData(data.grouped || []);
-      // Expand all artist sections by default
-      const expanded = {};
-      (data.grouped || []).forEach(g => { expanded[g.artist] = true; });
-      setExpandedArtists(expanded);
       if (data.error) setError(data.error);
     } catch (err) {
       console.error('Search error:', err);
@@ -78,9 +85,7 @@ export default function SearchView({ player, onDownloadStarted, onPlaylistCreate
   }, [doSearch]);
 
   const handleDownloadTrack = useCallback(async (track) => {
-    const url = track.url || (track.provider_id 
-      ? buildProviderURL(track) 
-      : buildAlbumUrl(track.provider, track.album_id));
+    const url = track.url || buildProviderURL(track);
     if (!url) return;
     try {
       await submitDownload(url, 'standard');
@@ -90,161 +95,100 @@ export default function SearchView({ player, onDownloadStarted, onPlaylistCreate
     }
   }, [onDownloadStarted]);
 
-  const toggleArtist = useCallback((artist) => {
-    setExpandedArtists(prev => ({ ...prev, [artist]: !prev[artist] }));
-  }, []);
-
-  const handleDownloadAlbum = useCallback((album) => {
-    const url = buildAlbumUrl(album.provider, album.album_id);
-    if (!url) return;
-    submitDownload(url, 'standard')
-      .then(() => {
-        if (onDownloadStarted) onDownloadStarted({
-          album: album.album,
-          artist: album.artist,
-          provider: album.provider,
-        });
-      })
-      .catch(err => console.error('Album download failed:', err));
-  }, [onDownloadStarted]);
+  const allTracks = flattenResults(groupedData);
 
   return (
-    <div>
-      <div className="view-header">
-        <h2>Search</h2>
-        <p>Find music across Tidal, Qobuz, and Deezer</p>
+    <div className="search-view">
+      {/* Search Header */}
+      <div className="search-header">
+        <div className="search-bar">
+          <input
+            type="text"
+            placeholder="Search for tracks, albums, or artists..."
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            autoFocus
+          />
+          <div className="source-pills">
+            {Object.entries(services).map(([svc, active]) => (
+              <button
+                key={svc}
+                className={`source-pill ${active ? 'active' : ''}`}
+                onClick={() => toggleService(svc)}
+              >
+                {svc.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+        {error && <div className="search-error">{error}</div>}
       </div>
 
-      <div className="search-row">
-        <input
-          type="text"
-          placeholder="Search for tracks, albums, or artists..."
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={handleKeyDown}
-          autoFocus
-        />
-        <button className="btn btn-accent" onClick={doSearch} disabled={loading || !query.trim()}>
-          {loading ? <span className="spinner" /> : 'Search'}
-        </button>
-      </div>
-
-      <div className="service-toggles">
-        {Object.entries(services).map(([svc, active]) => (
-          <button
-            key={svc}
-            className={active ? 'active' : ''}
-            onClick={() => toggleService(svc)}
-          >
-            {svc}
-          </button>
-        ))}
-      </div>
-
-      {error && (
-        <div style={{ padding: '8px 12px', background: 'rgba(255,82,82,0.1)', border: '1px solid var(--red)', borderRadius: 'var(--radius)', marginBottom: 12, color: 'var(--red)', fontSize: '0.82rem' }}>
-          {error}
-        </div>
-      )}
-
-      {loading && (
-        <div className="empty-state">
-          <span className="spinner spinner-lg" />
-          <p style={{ marginTop: 12 }}>Searching...</p>
-        </div>
-      )}
-
-      {!loading && searched && groupedData.length === 0 && (
-        <div className="empty-state">
-          <div className="icon">&#9835;</div>
-          <h3>No results found</h3>
-          <p>Try a different search term or enable more services.</p>
-        </div>
-      )}
-
-      {!loading && !searched && (
-        <div className="empty-state">
-          <div className="icon">&#9835;</div>
-          <h3>Search across Tidal, Qobuz, and Deezer</h3>
-          <p>Enter a query above to find music from all your streaming services.</p>
-        </div>
-      )}
-
-      {groupedData.length > 0 && (
-        <div className="grouped-results">
-          {groupedData.map(artistGroup => (
-            <div key={artistGroup.artist} className="artist-section">
-              <div className="artist-header" onClick={() => toggleArtist(artistGroup.artist)}>
-                <span className="expand-icon">{expandedArtists[artistGroup.artist] ? '▾' : '▸'}</span>
-                <h3>{artistGroup.artist}</h3>
-                <span className="artist-track-count">
-                  {countArtistTracks(artistGroup.albums)} track{countArtistTracks(artistGroup.albums) !== 1 ? 's' : ''}
-                </span>
-              </div>
-              {expandedArtists[artistGroup.artist] && (
-                <div className="artist-body">
-                  {artistGroup.albums.map((album, index) => (
-                    <div key={`${album.provider}-${album.album_id || index}`} className="album-card">
-                      <div className="album-card-header">
-                        {album.cover_url ? (
-                          <img
-                            className="album-cover"
-                            src={album.cover_url}
-                            alt={album.album}
-                            onError={e => { e.target.style.display = 'none'; }}
-                          />
-                        ) : (
-                          <div className="album-cover album-cover-placeholder">♪</div>
-                        )}
-                        <div className="album-info">
-                          <h4 className="album-name">{album.album}</h4>
-                          <div className="album-meta">
-                            <span className={`status-badge ${album.provider}`}>{album.provider}</span>
-                            <span className="album-track-count">
-                              {album.tracks.length} track{album.tracks.length !== 1 ? 's' : ''}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="album-actions">
-                          <button
-                            className="btn btn-sm btn-accent"
-                            onClick={(e) => { e.stopPropagation(); handleDownloadAlbum(album); }}
-                          >
-                            Download Album
-                          </button>
-                        </div>
-                      </div>
-                      <table className="track-table album-tracks">
-                        <thead>
-                          <tr>
-                            <th style={{ width: 36 }}>#</th>
-                            <th>Title</th>
-                            <th style={{ width: 60 }}>Dur</th>
-                            <th style={{ width: 80 }}>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {album.tracks.map((track, i) => (
-                            <TrackRow
-                              key={track.id || i}
-                              track={track}
-                              index={i}
-                              player={player}
-                              onDownload={handleDownloadTrack}
-                              onPlaylistCreated={onPlaylistCreated}
-                              compact
-                            />
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
+      {/* Results */}
+      <div className="search-results">
+        {loading ? (
+          <div className="loading-state">
+            <span className="spinner spinner-lg" />
+            <p>Searching...</p>
+          </div>
+        ) : searched && allTracks.length === 0 ? (
+          <div className="empty-state search-empty">
+            <div className="icon">🔍</div>
+            <h3>No results found</h3>
+            <p>Try a different search term or enable more sources.</p>
+          </div>
+        ) : allTracks.length > 0 ? (
+          <div className="results-grid">
+            {allTracks.map((track, i) => (
+              <div key={track.id || i} className="result-card">
+                <div className="card-art">
+                  {track.cover_url ? (
+                    <img src={track.cover_url} alt="" loading="lazy" />
+                  ) : (
+                    <div className="card-art-placeholder">♪</div>
+                  )}
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+                <div className="card-info">
+                  <div className="card-title">{track.title || track.name}</div>
+                  <div className="card-artist">{track.artist}</div>
+                  <div className="card-album">{track.album}</div>
+                </div>
+                <div className="card-actions">
+                  <button
+                    className="play-btn"
+                    onClick={() => player.play(track)}
+                    title="Play"
+                  >
+                    ▶
+                  </button>
+                  <button
+                    className="dl-btn"
+                    onClick={() => handleDownloadTrack(track)}
+                    title="Download"
+                  >
+                    ⬇
+                  </button>
+                  <button
+                    className="add-btn"
+                    onClick={() => player.addToPlaylist?.(track)}
+                    title="Add to playlist"
+                  >
+                    +
+                  </button>
+                </div>
+                <span className={`track-src ${track.provider || 'unknown'}`} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state search-empty">
+            <div className="icon">🎵</div>
+            <h3>Start searching</h3>
+            <p>Enter a query above to find music from Tidal, Qobuz, and Deezer.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -13,7 +13,7 @@ import { useSSE } from './hooks/useSSE';
 import { submitDownload } from './api/client';
 
 export default function App() {
-  const [activeView, setActiveView] = useState('search');
+  const [activeView, setActiveView] = useState(null);
   const [activePlaylistId, setActivePlaylistId] = useState(null);
   const [downloadRefresh, setDownloadRefresh] = useState(0);
   const [libraryRefresh, setLibraryRefresh] = useState(0);
@@ -42,8 +42,6 @@ export default function App() {
 
   const renderContent = () => {
     switch (activeView) {
-      case 'search':
-        return <SearchView player={player} onDownloadStarted={handleDownloadStarted} onPlaylistCreated={handlePlaylistCreated} />;
       case 'playlist':
         return <PlaylistView playlistId={activePlaylistId} player={player} />;
       case 'playlists':

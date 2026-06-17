@@ -1,64 +1,71 @@
-# Sharknado Deepwork Session - Playlist & Player Implementation
+# Sharknado Deepwork Session - Major Layout Redesign
 
 ## Session Date: 2026-06-17
 
 ## Current Status
-- Backend playlist APIs: ✅ Complete
-- Frontend playlist UI: ✅ Complete
-- Queue visualization: ✅ Complete
-- Player functionality: ✅ Working with queue support
-- Layout: ✅ Spacing improved
-- Version: 1.0.1 deployed
-- Deployment: ✅ Live at https://shark.gravitywell.xyz
+- Version: 1.0.2 deployed
+- Backend APIs: ✅ Complete
+- Playlist/Queue: ✅ Working
+- Layout: ❌ Backwards - search in sidebar, main area empty
 
-## Completed Phases
+## Problem Statement
+The layout is fundamentally inverted:
+- Sidebar (220px) contains: Search bar, source filters, results (cramped)
+- Main area (80% of screen): Completely empty
+- Player bar at bottom: Full width, correct
 
-### Phase 0: Fix Layout CSS (CRITICAL) - ✅ COMPLETE
-- Fixed `className="layout"` to `className="app-layout"` in App.jsx
-- Build verification passed
+## Target Layout
+```
+[Sidebar 200px - Nav Only] | [Main Area - Search + Results Grid]
+  BROWSE                   |  [Search Input Full Width] [TIDAL] [QOBUZ]
+    Search                 |  ----------------------------------------
+    Library                |  Results: Album/Track cards in grid
+    Downloads              |
+    Queue (0)              |
+                           |
+  PLAYLISTS                |
+    + New Playlist         |
+                           |
+[Player Bar - Full Width, Pinned Bottom]
+```
 
-### Phase 1: Complete Playlist Management - ✅ COMPLETE
-- Added "Create New Playlist" option inside picker
-- Added success/error feedback messages
-- Wired playlist refresh to Sidebar
-- Fixed CSS `--surface1` bug
-- Build verification passed
+## Phased Implementation Plan
 
-### Phase 2: Queue Visualization - ✅ COMPLETE
-- Created QueueView component with current track highlighting
-- Added queue navigation to Sidebar with count badge
-- Added queue styles to CSS
-- Fixed oracle review issues (dead code, unused props, helper ordering)
-- Build verification passed
+### Phase 1: Restructure App Layout & Sidebar
+- Move SearchView out of sidebar into Main area
+- Sidebar = pure navigation (Browse, Library, Downloads, Queue, Playlists)
+- Update App.jsx routing to render SearchView in main area
+- Sidebar width: 200px fixed
 
-### Phase 3: Layout Polish - ✅ COMPLETE
-- Widened sidebar from 200px to 220px
-- Increased main content padding from 20px to 24px 32px
-- Increased track-table cell padding from 6px to 10px vertical
-- Increased album-tracks cell padding from 3px to 6px
-- Increased media-header gap and margins
-- Increased search input padding
-- Increased empty-state padding
-- Increased service-toggles spacing
-- Increased download-table cell padding
-- Build verification passed
+### Phase 2: Search Bar in Main Area
+- SearchView becomes header of main content area
+- Search input full width
+- Source toggles as subtle pills near search
+- Search button secondary
 
-### Phase 4: Fix Remaining Placeholders - ✅ COMPLETE
-- Player cover art (conditional img tag)
-- Service indicators (dynamic status)
-- Download queue human-readable labels
-- Shared formatDuration utility
+### Phase 3: Results Grid Layout
+- Replace grouped list with responsive card grid
+- Album art cards with track info overlay
+- Hover states for play/download actions
+- Empty state: featured/recent content
 
-## Oracle Reviews
-- [x] Initial plan review completed
-- [x] Phase 0 review completed
-- [x] Phase 1 review completed (issues found and fixed)
-- [x] Phase 2 review completed (dead code cleaned, helpers reordered)
-- [x] Phase 3 review pending
-- [x] Phase 4 review completed
+### Phase 4: Typography & Visual Hierarchy
+- Stronger section labels in sidebar
+- Better weight differentiation
+- Subtle source toggle pills
+- Consistent spacing system
 
-## Deployment
-- Git commits pushed to gitea and github
-- Docker container rebuilt and restarted
-- Live at https://shark.gravitywell.xyz
-- Health endpoint: https://shark.gravitywell.xyz/api/health
+### Phase 5: Responsive & Polish
+- Mobile breakpoint adjustments
+- Card grid responsiveness
+- Performance: CSS containment, lazy loading
+
+## Oracle Review Required
+- [ ] Phase 1 plan review
+- [ ] Phase 2-3 implementation review
+- [ ] Phase 4-5 review
+
+## Build/Deploy
+- [ ] Build verification
+- [ ] Docker rebuild
+- [ ] Deploy to shark.gravitywell.xyz

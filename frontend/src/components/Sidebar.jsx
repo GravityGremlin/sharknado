@@ -38,8 +38,8 @@ export default function Sidebar({ activeView, onNavigate, activePlaylistId, onLi
       <div className="sidebar-section">
         <div className="sidebar-section-title">Browse</div>
         <div
-          className={`sidebar-item ${activeView === 'search' ? 'active' : ''}`}
-          onClick={() => onNavigate('search')}
+          className={`sidebar-item ${!activeView ? 'active' : ''}`}
+          onClick={() => onNavigate(null)}
         >
           Search
         </div>
@@ -66,7 +66,7 @@ export default function Sidebar({ activeView, onNavigate, activePlaylistId, onLi
           className={`sidebar-item ${activeView === 'queue' ? 'active' : ''}`}
           onClick={() => onNavigate('queue')}
         >
-          Queue<span className="count">{player?.queue?.length || 0}</span>
+          Queue <span className="count">{player?.queue?.length || 0}</span>
         </div>
       </div>
 
@@ -94,6 +94,7 @@ export default function Sidebar({ activeView, onNavigate, activePlaylistId, onLi
               onClick={() => onNavigate('playlist', pl.id)}
             >
               {pl.name}
+              <span className="count">{pl.track_count || 0}</span>
             </div>
           ))
         )}
