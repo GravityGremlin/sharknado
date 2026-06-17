@@ -69,6 +69,7 @@ export default function App() {
           activePlaylistId={activePlaylistId}
           onLibraryScanned={handleLibraryScanned}
           playlistRefresh={playlistRefresh}
+          player={player}
         />
         <div className="main-content">
           {renderContent()}

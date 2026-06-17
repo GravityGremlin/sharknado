@@ -1,12 +1,6 @@
 import React, { useState } from 'react';
 import { submitDownload, getPlaylists, addTrackToPlaylist, createPlaylist } from '../api/client';
-
-function formatDuration(seconds) {
-  if (!seconds || isNaN(seconds)) return '0:00';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
+import { formatDuration } from '../utils/format';
 
 function buildProviderURL(track) {
   const id = track.provider_id || track.id?.split(':').pop();

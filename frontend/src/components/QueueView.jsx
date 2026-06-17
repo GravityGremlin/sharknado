@@ -1,18 +1,12 @@
 import React from 'react';
-
-function formatDuration(seconds) {
-  if (!seconds || isNaN(seconds)) return '0:00';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
+import { formatDuration } from '../utils/format';
 
 export default function QueueView({ player }) {
   const { queue, queueIndex, currentTrack, play, setQueueAndPlay } = player;
 
   const handlePlayTrack = (index) => {
     if (queue[index]) {
-      play(queue[index]);
+      setQueueAndPlay(queue, index);
     }
   };
 

@@ -1,13 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import TrackRow from './TrackRow';
 import { getLibrary, scanLibrary } from '../api/client';
-
-function formatDuration(seconds) {
-  if (!seconds || isNaN(seconds)) return '0:00';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
+import { formatDuration } from '../utils/format';
 
 export default function LibraryView({ player, refreshTrigger }) {
   const [tracks, setTracks] = useState([]);

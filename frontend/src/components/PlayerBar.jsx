@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatDuration } from '../utils/format';
 
 function formatTime(seconds) {
   if (!seconds || isNaN(seconds)) return '0:00';
@@ -24,7 +25,11 @@ export default function PlayerBar({ player }) {
   return (
     <div className="player-bar">
       <div className="track-info">
-        <div className="cover placeholder">♪</div>
+        {currentTrack?.cover_url ? (
+          <img src={currentTrack.cover_url} alt="Cover" className="cover" />
+        ) : (
+          <div className="cover placeholder">♪</div>
+        )}
         <div className="meta">
           <div className="title">
             {currentTrack ? currentTrack.title : 'No track selected'}

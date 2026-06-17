@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import TrackRow from './TrackRow';
 import { getPlaylist, removeTrackFromPlaylist } from '../api/client';
+import { formatDuration } from '../utils/format';
 
 export default function PlaylistView({ playlistId, player }) {
   const [playlist, setPlaylist] = useState(null);
@@ -57,7 +58,11 @@ export default function PlaylistView({ playlistId, player }) {
   return (
     <div>
       <div className="media-header">
-        <div className="cover-large placeholder">♪</div>
+        {playlist.cover_url ? (
+          <img src={playlist.cover_url} alt="Playlist" className="cover-large" />
+        ) : (
+          <div className="cover-large placeholder">♪</div>
+        )}
         <div className="media-meta">
           <div className="label">Playlist</div>
           <h1>{playlist.name}</h1>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { scanLibrary, getPlaylists } from '../api/client';
 
-export default function Sidebar({ activeView, onNavigate, activePlaylistId, onLibraryScanned, playlistRefresh }) {
+export default function Sidebar({ activeView, onNavigate, activePlaylistId, onLibraryScanned, playlistRefresh, player }) {
   const [playlists, setPlaylists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
@@ -66,7 +66,7 @@ export default function Sidebar({ activeView, onNavigate, activePlaylistId, onLi
           className={`sidebar-item ${activeView === 'queue' ? 'active' : ''}`}
           onClick={() => onNavigate('queue')}
         >
-          Queue
+          Queue<span className="count">{player?.queue?.length || 0}</span>
         </div>
       </div>
 

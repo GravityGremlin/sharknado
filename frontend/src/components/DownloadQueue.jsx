@@ -11,6 +11,49 @@ const STATUS_LABELS = {
   cancelled: 'Cancelled',
 };
 
+function getJobLabel(job) {
+  if (job.title && job.title !== job.url) return job.title;
+  
+  if (!job.url) return 'Unknown';
+  
+  const url = new URL(job.url);
+  const hostname = url.hostname.replace(/^www\./, '');
+  
+  // Try to extract service and ID from path
+  const parts = url.pathname.split('/').filter(Boolean);
+  
+  if (hostname.includes('tidal')) {
+    if (parts[0] === 'track' && parts[1]) return `TIDAL: Track ${parts[1]}`;
+    if (parts[0] === 'album' && parts[1]) return `TIDAL: Album ${parts[1]}`;
+    if (parts[0] === 'artist' && parts[1]) return `TIDAL: Artist ${parts[1]}`;
+    if (parts[0] === 'playlist' && parts[1]) return `TIDAL: Playlist ${parts[1]}`;
+    if (parts[0] === 'video' && parts[1]) return `TIDAL: Video ${parts[1]}`;
+    return 'TIDAL';
+  }
+  
+  if (hostname.includes('qobuz')) {
+    if (parts[0] === 'track' && parts[1]) return `Qobuz: Track ${parts[1]}`;
+    if (parts[0] === 'album' && parts[1]) return `Qobuz: Album ${parts[1]}`;
+    if (parts[0] === 'artist' && parts[1]) return `Qobuz: Artist ${parts[1]}`;
+    if (parts[0] === 'playlist' && parts[1]) return `Qobuz: Playlist ${parts[1]}`;
+    return 'Qobuz';
+  }
+  
+  if (hostname.includes('deezer')) {
+    if (parts[0] === 'track' && parts[1]) return `Deezer: Track ${parts[1]}`;
+    if (parts[0] === 'album' && parts[1]) return `Deezer: Album ${parts[1]}`;
+    if (parts[0] === 'artist' && parts[1]) return `Deezer: Artist ${parts[1]}`;
+    if (parts[0] === 'playlist' && parts[1]) return `Deezer: Playlist ${parts[1]}`;
+    return 'Deezer';
+  }
+  
+  if (hostname.includes('youtube') || hostname.includes('youtu.be')) return 'YouTube';
+  if (hostname.includes('spotify')) return 'Spotify';
+  
+  // Fallback to job title or hostname
+  return job.title || hostname;
+}
+
 export default function DownloadQueue({ refreshTrigger }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +142,7 @@ export default function DownloadQueue({ refreshTrigger }) {
             {jobs.map(job => (
               <tr key={job.id}>
                 <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {job.url}
+                  {getJobLabel(job)}
                 </td>
                 <td>{job.service}</td>
                 <td>
