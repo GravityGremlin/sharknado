@@ -5,6 +5,7 @@ import PlayerBar from './components/PlayerBar';
 import SearchView from './components/SearchView';
 import PlaylistView from './components/PlaylistView';
 import PlaylistsView from './components/PlaylistsView';
+import QueueView from './components/QueueView';
 import DownloadQueue from './components/DownloadQueue';
 import LibraryView from './components/LibraryView';
 import { usePlayer } from './hooks/usePlayer';
@@ -42,22 +43,24 @@ export default function App() {
   const renderContent = () => {
     switch (activeView) {
       case 'search':
-        return <SearchView player={player} onDownloadStarted={handleDownloadStarted} />;
+        return <SearchView player={player} onDownloadStarted={handleDownloadStarted} onPlaylistCreated={handlePlaylistCreated} />;
       case 'playlist':
         return <PlaylistView playlistId={activePlaylistId} player={player} />;
       case 'playlists':
         return <PlaylistsView onNavigate={navigateTo} playlistRefresh={playlistRefresh} />;
+      case 'queue':
+        return <QueueView player={player} onNavigate={navigateTo} />;
       case 'downloads':
         return <DownloadQueue refreshTrigger={downloadRefresh} />;
       case 'library':
         return <LibraryView player={player} refreshTrigger={libraryRefresh} />;
       default:
-        return <SearchView player={player} onDownloadStarted={handleDownloadStarted} />;
+        return <SearchView player={player} onDownloadStarted={handleDownloadStarted} onPlaylistCreated={handlePlaylistCreated} />;
     }
   };
 
   return (
-    <div className="layout">
+    <div className="app-layout">
       <TitleBar connected={sse.connected} />
       <div className="main">
         <Sidebar

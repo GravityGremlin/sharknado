@@ -62,6 +62,12 @@ export default function Sidebar({ activeView, onNavigate, activePlaylistId, onLi
         >
           Downloads
         </div>
+        <div
+          className={`sidebar-item ${activeView === 'queue' ? 'active' : ''}`}
+          onClick={() => onNavigate('queue')}
+        >
+          Queue
+        </div>
       </div>
 
       <div className="sidebar-section">

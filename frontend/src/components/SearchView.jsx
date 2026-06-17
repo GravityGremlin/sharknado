@@ -34,7 +34,7 @@ function countArtistTracks(albums) {
   return albums.reduce((sum, a) => sum + a.tracks.length, 0);
 }
 
-export default function SearchView({ player, onDownloadStarted }) {
+export default function SearchView({ player, onDownloadStarted, onPlaylistCreated }) {
   const [query, setQuery] = useState('');
   const [groupedData, setGroupedData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -231,6 +231,7 @@ export default function SearchView({ player, onDownloadStarted }) {
                               index={i}
                               player={player}
                               onDownload={handleDownloadTrack}
+                              onPlaylistCreated={onPlaylistCreated}
                               compact
                             />
                           ))}

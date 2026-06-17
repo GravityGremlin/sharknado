@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { submitDownload, getPlaylists, addTrackToPlaylist } from '../api/client';
+import { submitDownload, getPlaylists, addTrackToPlaylist, createPlaylist } from '../api/client';
 
 function formatDuration(seconds) {
   if (!seconds || isNaN(seconds)) return '0:00';
@@ -23,10 +23,13 @@ function buildProviderURL(track) {
   }
 }
 
-export default function TrackRow({ track, index, player, onDownload, compact, onPlay }) {
+export default function TrackRow({ track, index, player, onDownload, compact, onPlay, onPlaylistCreated }) {
   const [showPlaylistPicker, setShowPlaylistPicker] = useState(false);
   const [playlists, setPlaylists] = useState([]);
   const [selectedPlaylist, setSelectedPlaylist] = useState('');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [feedback, setFeedback] = useState(null);
 
   const handlePlay = () => {
     if (onPlay) {
@@ -50,9 +53,31 @@ export default function TrackRow({ track, index, player, onDownload, compact, on
     if (!playlistId) return;
     try {
       await addTrackToPlaylist(playlistId, track.id);
-      setShowPlaylistPicker(false);
+      setFeedback({ type: 'success', message: 'Added to playlist' });
+      setTimeout(() => {
+        setFeedback(null);
+        setShowPlaylistPicker(false);
+      }, 1500);
     } catch (err) {
+      setFeedback({ type: 'error', message: 'Failed to add track' });
       console.error('Failed to add track to playlist:', err);
+    }
+  };
+
+  const handleCreatePlaylist = async () => {
+    if (!newPlaylistName.trim()) return;
+    try {
+      const newPlaylist = await createPlaylist(newPlaylistName.trim());
+      setPlaylists(prev => [...prev, newPlaylist]);
+      setSelectedPlaylist(newPlaylist.id);
+      setShowCreateForm(false);
+      setNewPlaylistName('');
+      setFeedback({ type: 'success', message: 'Playlist created' });
+      if (onPlaylistCreated) onPlaylistCreated();
+      setTimeout(() => setFeedback(null), 1500);
+    } catch (err) {
+      setFeedback({ type: 'error', message: 'Failed to create playlist' });
+      console.error('Failed to create playlist:', err);
     }
   };
 
@@ -114,35 +139,80 @@ export default function TrackRow({ track, index, player, onDownload, compact, on
           <button className="add-btn" title="Add to playlist" onClick={handlePickerClick}>+</button>
           {showPlaylistPicker && (
             <div className="playlist-picker" onClick={e => e.stopPropagation()}>
-              {playlists.length === 0 ? (
-                <div className="playlist-picker-empty">
-                  No playlists yet
+              {feedback && (
+                <div className={`playlist-picker-feedback ${feedback.type}`}>
+                  {feedback.message}
                 </div>
-              ) : (
-                <select
-                  value={selectedPlaylist}
-                  onChange={e => setSelectedPlaylist(e.target.value)}
-                  onClick={e => e.stopPropagation()}
-                >
-                  <option value="">-- Select Playlist --</option>
-                  {playlists.map(pl => (
-                    <option key={pl.id} value={pl.id}>{pl.name}</option>
-                  ))}
-                </select>
               )}
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => handleAddToPlaylist(selectedPlaylist)}
-                disabled={!selectedPlaylist}
-              >
-                Add
-              </button>
-              <button
-                className="btn btn-sm"
-                onClick={() => setShowPlaylistPicker(false)}
-              >
-                Cancel
-              </button>
+              
+              {!showCreateForm ? (
+                <>
+                  {playlists.length === 0 ? (
+                    <div className="playlist-picker-empty">
+                      No playlists yet
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedPlaylist}
+                      onChange={e => setSelectedPlaylist(e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <option value="">-- Select Playlist --</option>
+                      {playlists.map(pl => (
+                        <option key={pl.id} value={pl.id}>{pl.name}</option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleAddToPlaylist(selectedPlaylist)}
+                    disabled={!selectedPlaylist}
+                  >
+                    Add
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => setShowCreateForm(true)}
+                  >
+                    + New
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => setShowPlaylistPicker(false)}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <div className="playlist-create-form">
+                  <input
+                    type="text"
+                    placeholder="Playlist name"
+                    value={newPlaylistName}
+                    onChange={e => setNewPlaylistName(e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    autoFocus
+                  />
+                  <div className="playlist-create-actions">
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={handleCreatePlaylist}
+                      disabled={!newPlaylistName.trim()}
+                    >
+                      Create
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => {
+                        setShowCreateForm(false);
+                        setNewPlaylistName('');
+                      }}
+                    >
+                      Back
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

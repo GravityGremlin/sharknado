@@ -1137,7 +1137,7 @@ input[type="range"].volume-slider { width: 80px; }
   width: 100%;
   padding: 6px 8px;
   margin-bottom: 6px;
-  background: var(--surface1);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
@@ -1149,6 +1149,125 @@ input[type="range"].volume-slider { width: 80px; }
   padding: 4px 10px;
   margin: 2px 0;
   width: 100%;
+}
+
+.playlist-picker-feedback {
+  font-size: 0.75rem;
+  padding: 6px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.playlist-picker-feedback.success {
+  background: rgba(0, 230, 118, 0.1);
+  color: var(--green);
+  border: 1px solid rgba(0, 230, 118, 0.3);
+}
+
+.playlist-picker-feedback.error {
+  background: rgba(255, 82, 82, 0.1);
+  color: var(--red);
+  border: 1px solid rgba(255, 82, 82, 0.3);
+}
+
+.playlist-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.playlist-create-form input {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.playlist-create-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.playlist-create-actions .btn-sm {
+  flex: 1;
+}
+
+/* ── Queue ───────────────────────────────────────────────────── */
+
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.queue-item:hover {
+  background: var(--surface2);
+  border-color: var(--border-light);
+}
+
+.queue-item.current {
+  background: var(--surface3);
+  border-color: var(--accent);
+}
+
+.queue-item.played {
+  opacity: 0.5;
+}
+
+.queue-item-number {
+  width: 24px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text3);
+}
+
+.queue-playing {
+  color: var(--green);
+  font-size: 0.85rem;
+}
+
+.queue-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-item-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-item-artist {
+  font-size: 0.75rem;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-item-duration {
+  font-size: 0.75rem;
+  color: var(--text3);
+  font-family: var(--mono);
 }
 
 /* ── Modal ───────────────────────────────────────────────────── */
@@ -1200,7 +1319,7 @@ input[type="range"].volume-slider { width: 80px; }
 .modal .form-group input {
   width: 100%;
   padding: 8px 12px;
-  background: var(--surface1);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
