@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sharknado/backend/internal/events"
@@ -37,7 +38,13 @@ type Manager struct {
 // Job represents an active or completed download.
 type Job struct {
 	models.DownloadJob
-	CancelFunc context.CancelFunc
+	CancelFunc  context.CancelFunc
+	atomProgress atomic.Int64 // 0-10000 (fixed-point for atomic float)
+}
+
+// getProgress returns the atomic progress as a float64.
+func (j *Job) getProgress() float64 {
+	return float64(j.atomProgress.Load()) / 100.0
 }
 
 // Config for the download manager.
@@ -118,20 +125,19 @@ func (m *Manager) List() []*models.DownloadJob {
 // Pause pauses a running job.
 func (m *Manager) Pause(id string) error {
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	job, ok := m.jobs[id]
 	if !ok {
-		m.mu.Unlock()
 		return fmt.Errorf("job not found: %s", id)
 	}
 	if job.Status != "running" {
-		m.mu.Unlock()
 		return fmt.Errorf("job not running")
 	}
+	job.Status = "paused"
 	if job.CancelFunc != nil {
 		job.CancelFunc()
+		job.CancelFunc = nil
 	}
-	job.Status = "paused"
-	m.mu.Unlock()
 	m.broadcast("job.updated", job.DownloadJob)
 	return nil
 }
@@ -139,17 +145,17 @@ func (m *Manager) Pause(id string) error {
 // Cancel cancels a job.
 func (m *Manager) Cancel(id string) error {
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	job, ok := m.jobs[id]
 	if !ok {
-		m.mu.Unlock()
 		return fmt.Errorf("job not found: %s", id)
-	}
-	if job.CancelFunc != nil {
-		job.CancelFunc()
 	}
 	job.Status = "cancelled"
 	job.FinishedAt = time.Now().UTC().Format(time.RFC3339)
-	m.mu.Unlock()
+	if job.CancelFunc != nil {
+		job.CancelFunc()
+		job.CancelFunc = nil
+	}
 	m.broadcast("job.updated", job.DownloadJob)
 	return nil
 }
@@ -193,6 +199,12 @@ func (m *Manager) execute(job *Job) {
 	defer func() { <-m.workers }()
 
 	m.mu.Lock()
+	// Fix 1.1: Re-check status after acquiring lock to prevent TOCTOU race
+	if job.Status == "cancelled" || job.Status == "paused" {
+		m.mu.Unlock()
+		cancel()
+		return
+	}
 	job.CancelFunc = cancel
 	job.Status = "running"
 	job.StartedAt = time.Now().UTC().Format(time.RFC3339)
@@ -203,18 +215,21 @@ func (m *Manager) execute(job *Job) {
 
 	switch job.Service {
 	case "tidal":
-		cmd = exec.CommandContext(ctx, "tidal-dl-ng", "dl", job.URL)
+		// Fix 1.3: Use -- to prevent argument injection
+		cmd = exec.CommandContext(ctx, "tidal-dl-ng", "dl", "--", job.URL)
 	case "qobuz", "deezer":
-		cmd = exec.CommandContext(ctx, "rip", "url", job.URL)
+		// Fix 1.3: Use -- to prevent argument injection
+		cmd = exec.CommandContext(ctx, "rip", "url", "--", job.URL)
 	default:
 		// Try streamrip as fallback
-		cmd = exec.CommandContext(ctx, "rip", "url", job.URL)
+		cmd = exec.CommandContext(ctx, "rip", "url", "--", job.URL)
 	}
 
 	cmd.Dir = m.dlDir
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("HOME=%s", os.Getenv("HOME")),
 		"PATH=/usr/local/bin:/usr/bin:/bin",
+		"STREAMRIP_CONFIG_DIR=/app/data/streamrip-config",
 	)
 
 	stdout, err := cmd.StdoutPipe()

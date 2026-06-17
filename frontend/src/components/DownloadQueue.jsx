@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getDownloads, pauseDownload, cancelDownload } from '../api/client';
+import { useSSE } from '../hooks/useSSE';
 
 const STATUS_LABELS = {
   queued: 'Queued',
@@ -13,6 +14,7 @@ const STATUS_LABELS = {
 export default function DownloadQueue({ refreshTrigger }) {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { addEventListener } = useSSE('/api/events');
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -29,11 +31,19 @@ export default function DownloadQueue({ refreshTrigger }) {
     fetchJobs();
   }, [fetchJobs, refreshTrigger]);
 
-  // Poll for updates every 3 seconds
+  // Subscribe to SSE events for real-time updates
   useEffect(() => {
-    const interval = setInterval(fetchJobs, 3000);
-    return () => clearInterval(interval);
-  }, [fetchJobs]);
+    const cleanup1 = addEventListener('job.updated', () => {
+      fetchJobs();
+    });
+    const cleanup2 = addEventListener('job.log', () => {
+      fetchJobs();
+    });
+    return () => {
+      cleanup1();
+      cleanup2();
+    };
+  }, [addEventListener, fetchJobs]);
 
   const handlePause = async (id) => {
     try {

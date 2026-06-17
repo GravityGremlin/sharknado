@@ -8,6 +8,21 @@ function formatDuration(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function buildProviderURL(track) {
+  const id = track.provider_id || track.id?.split(':').pop();
+  if (!id) return '';
+  switch (track.provider) {
+    case 'tidal':
+      return `https://tidal.com/track/${id}`;
+    case 'qobuz':
+      return `https://www.qobuz.com/track/${id}`;
+    case 'deezer':
+      return `https://www.deezer.com/track/${id}`;
+    default:
+      return '';
+  }
+}
+
 export default function TrackRow({ track, index, player, onDownload, compact }) {
   const handlePlay = () => {
     player.play(track);
@@ -63,19 +78,4 @@ export default function TrackRow({ track, index, player, onDownload, compact }) 
       </td>
     </tr>
   );
-}
-
-function buildProviderURL(track) {
-  const id = track.provider_id || track.id?.split(':').pop();
-  if (!id) return '';
-  switch (track.provider) {
-    case 'tidal':
-      return `https://tidal.com/track/${id}`;
-    case 'qobuz':
-      return `https://www.qobuz.com/track/${id}`;
-    case 'deezer':
-      return `https://www.deezer.com/track/${id}`;
-    default:
-      return '';
-  }
 }

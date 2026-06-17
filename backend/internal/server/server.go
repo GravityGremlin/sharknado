@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -65,7 +66,7 @@ func NewServer(cfg *config.Config, db *library.DB, broker *events.EventBroker) *
 func (s *Server) Start() error {
 	addr := ":" + s.cfg.Port
 
-	handler := corsMiddleware(s.mux)
+	handler := corsMiddleware(s.cfg.AllowedOrigins, s.mux)
 
 	httpServer := &http.Server{
 		Addr:         addr,
@@ -97,10 +98,15 @@ func (s *Server) Start() error {
 	return httpServer.Shutdown(ctx)
 }
 
-// corsMiddleware adds CORS headers for development.
-func corsMiddleware(next http.Handler) http.Handler {
+// corsMiddleware adds CORS headers.
+func corsMiddleware(allowedOrigins string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		if allowedOrigins == "*" || allowedOrigins == "" {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		} else if origin != "" && stringsContains(strings.Split(allowedOrigins, ","), origin) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
@@ -111,4 +117,13 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func stringsContains(list []string, target string) bool {
+	for _, s := range list {
+		if strings.TrimSpace(s) == target {
+			return true
+		}
+	}
+	return false
 }

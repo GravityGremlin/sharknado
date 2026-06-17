@@ -39,9 +39,14 @@ export function useSSE(url) {
   }, [url]);
 
   const addEventListener = useCallback((eventType, handler) => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.addEventListener(eventType, handler);
+    const es = eventSourceRef.current;
+    if (es) {
+      es.addEventListener(eventType, handler);
+      return () => {
+        es.removeEventListener(eventType, handler);
+      };
     }
+    return () => {};
   }, []);
 
   return { events, connected, lastEvent, addEventListener };

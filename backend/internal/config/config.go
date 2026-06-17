@@ -15,6 +15,7 @@ type Config struct {
 	TidalConfigDir     string
 	StreamripConfigDir string
 	FrontendDir        string
+	AllowedOrigins     string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -28,6 +29,7 @@ func Load() *Config {
 		TidalConfigDir:     getEnv("TIDAL_CONFIG_DIR", "./data/tidal-config"),
 		StreamripConfigDir: getEnv("STREAMRIP_CONFIG_DIR", "./data/streamrip-config"),
 		FrontendDir:        getEnv("FRONTEND_DIR", "../frontend/dist"),
+		AllowedOrigins:     getEnv("ALLOWED_ORIGINS", "*"),
 	}
 }
 

@@ -507,6 +507,7 @@ func (e *Engine) persistTidalToken() {
 		"access_token":  e.tidalToken,
 		"refresh_token": e.tidalRefresh,
 		"expiry_time":   float64(time.Now().Add(24 * time.Hour).Unix()),
+		"country_code":  e.tidalCountry,
 	}
 	data, err := json.MarshalIndent(tok, "", "  ")
 	if err != nil {

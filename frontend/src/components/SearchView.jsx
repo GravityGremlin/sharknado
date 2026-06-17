@@ -51,7 +51,6 @@ export default function SearchView({ player, onDownloadStarted }) {
       if (data.error) setError(data.error);
     } catch (err) {
       console.error('Search error:', err);
-      setResults([]);
       setGroupedData([]);
       setError(err.message);
     } finally {
@@ -160,8 +159,8 @@ export default function SearchView({ player, onDownloadStarted }) {
               </div>
               {expandedArtists[artistGroup.artist] && (
                 <div className="artist-body">
-                  {artistGroup.albums.map(album => (
-                    <div key={album.album_id || album.album} className="album-card">
+                  {artistGroup.albums.map((album, index) => (
+                    <div key={`${album.provider}-${album.album_id || index}`} className="album-card">
                       <div className="album-card-header">
                         {album.cover_url ? (
                           <img

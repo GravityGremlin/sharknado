@@ -3,13 +3,13 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/sharknado/backend/internal/download"
 	"github.com/sharknado/backend/internal/models"
@@ -32,6 +32,7 @@ func (s *Server) registerRoutes() {
 	mux.HandleFunc("GET /api/downloads/{id}", s.handleDownloadGet)
 	mux.HandleFunc("POST /api/downloads/{id}/pause", s.handleDownloadPause)
 	mux.HandleFunc("POST /api/downloads/{id}/cancel", s.handleDownloadCancel)
+	mux.HandleFunc("POST /api/downloads/{id}/resume", s.handleDownloadResume)
 	mux.HandleFunc("DELETE /api/downloads/{id}", s.handleDownloadDelete)
 	mux.HandleFunc("GET /api/playlists", s.handlePlaylistList)
 	mux.HandleFunc("POST /api/playlists", s.handlePlaylistCreate)
@@ -58,7 +59,12 @@ func (s *Server) registerRoutes() {
 				http.NotFound(w, r)
 				return
 			}
-			filePath := filepath.Join(frontendDir, filepath.Clean(r.URL.Path))
+			cleanPath := filepath.Clean(r.URL.Path)
+			if strings.Contains(cleanPath, "..") {
+				http.Error(w, "Bad Request", http.StatusBadRequest)
+				return
+			}
+			filePath := filepath.Join(frontendDir, cleanPath)
 			if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
 				http.ServeFile(w, r, filePath)
 				return
@@ -231,6 +237,7 @@ type downloadRequest struct {
 }
 
 func (s *Server) handleDownloadCreate(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10) // 16KB limit
 	var req downloadRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
@@ -243,6 +250,15 @@ func (s *Server) handleDownloadCreate(w http.ResponseWriter, r *http.Request) {
 
 	job := s.download.Submit(req.URL, req.Service, req.Quality)
 	writeJSON(w, http.StatusCreated, job)
+}
+
+func (s *Server) handleDownloadResume(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.download.Resume(id); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "status": "queued"})
 }
 
 func (s *Server) handleDownloadList(w http.ResponseWriter, r *http.Request) {
@@ -297,11 +313,25 @@ type createPlaylistRequest struct {
 	Description string `json:"description,omitempty"`
 }
 
+type addTrackRequest struct {
+	TrackID string `json:"track_id"`
+}
+
 func (s *Server) handlePlaylistList(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"playlists": []any{}})
+	playlists, err := s.db.ListPlaylists()
+	if err != nil {
+		log.Printf("list playlists: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list playlists"})
+		return
+	}
+	if playlists == nil {
+		playlists = []models.Playlist{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"playlists": playlists})
 }
 
 func (s *Server) handlePlaylistCreate(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10) // 16KB limit
 	var req createPlaylistRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
@@ -311,35 +341,87 @@ func (s *Server) handlePlaylistCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"id": "placeholder", "name": req.Name})
+
+	p := &models.Playlist{
+		ID:   fmt.Sprintf("pl-%d", time.Now().UnixNano()),
+		Name: req.Name,
+		Description: req.Description,
+	}
+	if err := s.db.InsertPlaylist(p); err != nil {
+		log.Printf("create playlist: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create playlist"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, p)
 }
 
 func (s *Server) handlePlaylistGet(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"id": r.PathValue("id"), "tracks": []any{}})
+	id := r.PathValue("id")
+	playlist, err := s.db.GetPlaylist(id)
+	if err != nil {
+		log.Printf("get playlist %s: %v", id, err)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "playlist not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, playlist)
 }
 
 func (s *Server) handlePlaylistUpdate(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10) // 16KB limit
+	id := r.PathValue("id")
+	var req createPlaylistRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if err := s.db.UpdatePlaylist(id, &models.Playlist{Name: req.Name, Description: req.Description}); err != nil {
+		log.Printf("update playlist %s: %v", id, err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update playlist"})
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
 func (s *Server) handlePlaylistDelete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.db.DeletePlaylist(id); err != nil {
+		log.Printf("delete playlist %s: %v", id, err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete playlist"})
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-type addTrackRequest struct {
-	TrackID string `json:"track_id"`
-}
-
 func (s *Server) handlePlaylistAddTrack(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<10) // 16KB limit
+	id := r.PathValue("id")
 	var req addTrackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	// Get current track count for position
+	pl, err := s.db.GetPlaylist(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "playlist not found"})
+		return
+	}
+	if err := s.db.AddTrackToPlaylist(id, req.TrackID, len(pl.Tracks)); err != nil {
+		log.Printf("add track to playlist: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to add track"})
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"status": "added", "track_id": req.TrackID})
 }
 
 func (s *Server) handlePlaylistRemoveTrack(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	trackID := r.PathValue("trackId")
+	if err := s.db.RemoveTrackFromPlaylist(id, trackID); err != nil {
+		log.Printf("remove track from playlist: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to remove track"})
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -396,15 +478,6 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(data)
-}
-
-// Download returns a reader for the given file path. Used for streaming.
-func Download(path string) (io.ReadCloser, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("open file: %w", err)
-	}
-	return f, nil
 }
 
 // albumGroup is an album with its tracks in a grouped search response.
